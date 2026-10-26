@@ -104,7 +104,7 @@ async function patchAgency(req: Request, db: Database, id: number): Promise<Resp
   return json(Object.keys(patch).length === 0 ? agency : updateAgency(db, id, patch));
 }
 
-const UI_MISSING = "web UI is not built: run `bun run build` in web/";
+const UI_MISSING = "web UI is not built: run `bun run web:build`";
 
 /** Serves `web/dist`, falling back to index.html for app routes; the API keeps working without a build. */
 async function serveStatic(pathname: string): Promise<Response> {
