@@ -47,8 +47,8 @@ export async function runCollectors(
   const findByDedupKey = db.prepare<{ id: number }, [string]>("SELECT id FROM offers WHERE dedup_key = ? LIMIT 1");
   const touch = db.prepare("UPDATE offers SET last_seen_at = ? WHERE id = ?");
   const updateOffer = db.prepare(
-    `UPDATE offers SET description = ?, location_text = ?, city = ?, salary_min = ?, salary_max = ?,
-       currency = ?, published_at = ?, partial = ?, raw_json = ?, last_seen_at = ? WHERE id = ?`,
+    `UPDATE offers SET description = ?, location_text = ?, city = ?, workplace = ?, salary_min = ?, salary_max = ?,
+       currency = ?, published_at = ?, dedup_key = ?, partial = ?, raw_json = ?, last_seen_at = ? WHERE id = ?`,
   );
   const clearRuleLabels = db.prepare("DELETE FROM offer_labels WHERE offer_id = ? AND origin = 'rule'");
   const insertOffer = db.prepare<{ id: number }, SQLQueryBindings[]>(
@@ -68,10 +68,12 @@ export async function runCollectors(
           offer.description,
           offer.locationText,
           offer.city,
+          offer.workplace,
           offer.salaryMin,
           offer.salaryMax,
           offer.currency,
           offer.publishedAt,
+          offer.dedupKey,
           offer.partial ? 1 : 0,
           offer.rawJson,
           at,

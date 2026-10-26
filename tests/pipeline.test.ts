@@ -90,20 +90,21 @@ describe("runCollectors", () => {
     await runCollectors(db, [fake("fake", [failed])], now);
 
     clock = new Date("2026-10-27T09:30:00Z");
-    const full = raw({ sourceId: "retry-1", description: "Plný popis", city: "Brno", raw: { id: 1 } });
+    const full = raw({ sourceId: "retry-1", description: "Plně remote pozice", city: "Brno", raw: { id: 1 } });
     const summaries = await runCollectors(db, [fake("fake", [full])], now);
 
     expect(summaries[0]).toMatchObject({ status: "ok", fetched: 1, new: 0, updated: 1 });
     const rows = db
       .query<
-        { description: string; city: string | null; partial: number; first_seen_at: string; last_seen_at: string; raw_json: string },
+        { description: string; city: string | null; workplace: string; partial: number; first_seen_at: string; last_seen_at: string; raw_json: string },
         []
-      >("SELECT description, city, partial, first_seen_at, last_seen_at, raw_json FROM offers")
+      >("SELECT description, city, workplace, partial, first_seen_at, last_seen_at, raw_json FROM offers")
       .all();
     expect(rows.length).toBe(1);
     expect(rows[0]).toMatchObject({
-      description: "Plný popis",
+      description: "Plně remote pozice",
       city: "Brno",
+      workplace: "remote",
       partial: 0,
       first_seen_at: "2026-10-26T08:00:00.000Z",
       last_seen_at: "2026-10-27T09:30:00.000Z",
@@ -122,7 +123,7 @@ describe("runCollectors", () => {
       .all();
     expect(after.length).toBe(1);
     expect(after[0]).toMatchObject({
-      description: "Plný popis",
+      description: "Plně remote pozice",
       city: "Brno",
       last_seen_at: "2026-10-28T10:00:00.000Z",
     });
