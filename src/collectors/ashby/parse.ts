@@ -97,8 +97,8 @@ function salary(job: AshbyJob): Pick<RawOffer, "salaryMin" | "salaryMax" | "curr
 
 function toRawOffer(job: AshbyJob, company: string): RawOffer {
   const description = job.descriptionPlain?.trim() ?? "";
-  const fullRemote = workMode(job) === "fully remote";
-  const tags = [workMode(job), employmentTag(job), job.location?.trim() ?? null].filter(
+  const mode = workMode(job);
+  const tags = [mode, employmentTag(job), job.location?.trim() ?? null].filter(
     (tag): tag is string => Boolean(tag),
   );
   const { descriptionHtml: _html, descriptionPlain: _plain, ...raw } = job;
@@ -110,7 +110,7 @@ function toRawOffer(job: AshbyJob, company: string): RawOffer {
     company,
     locationText: job.location?.trim() || null,
     // A fully remote job's postal address is the company seat, not where the work happens.
-    city: fullRemote ? null : job.address?.postalAddress?.addressLocality?.trim() || null,
+    city: mode === "fully remote" ? null : job.address?.postalAddress?.addressLocality?.trim() || null,
     ...salary(job),
     publishedAt: job.publishedAt ?? null,
     description,

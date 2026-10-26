@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createAshbyCollector } from "../src/collectors/ashby";
-import { parseBoard } from "../src/collectors/ashby/parse";
+import { isRelevant, parseBoard, type AshbyJob } from "../src/collectors/ashby/parse";
 import type { Collector, FetchText } from "../src/types";
 
 const fixture = (name: string) =>
@@ -48,6 +48,13 @@ describe("ashby board parsing", () => {
     expect(senior?.city).toBeNull();
     expect([senior?.salaryMin, senior?.salaryMax, senior?.currency]).toEqual([79000, 105000, "EUR"]);
     expect(offers.find((o) => o.title.startsWith("Don't see"))?.locationText).toBe("Remote");
+  });
+
+  test("judges relevance: unspecified or Europe location keeps a remote job, a foreign office does not", () => {
+    const job = (patch: Partial<AshbyJob>) => ({ id: "x", title: "T", jobUrl: "u", ...patch });
+    expect(isRelevant(job({ isRemote: true }))).toBe(true);
+    expect(isRelevant(job({ isRemote: true, location: "Europe" }))).toBe(true);
+    expect(isRelevant(job({ workplaceType: "OnSite", location: "Berlin, Germany" }))).toBe(false);
   });
 });
 
