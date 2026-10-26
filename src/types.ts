@@ -111,7 +111,7 @@ export interface OfferToScore {
   labels: string[];
 }
 
-export interface AgencyRow {
+export type AgencyRow = {
   id: number;
   name: string;
   web: string | null;
@@ -128,6 +128,21 @@ export interface AgencyRow {
   lastContactAt: string | null;
   createdAt: string;
   updatedAt: string;
+} & AgencyCrawl;
+
+/** Result of crawling an agency website (src/agencies/crawl.ts); all null/false until crawled. */
+export interface AgencyCrawl {
+  /** Page where the hiring evidence was found (careers page or offer page). */
+  careersUrl: string | null;
+  /** True only with explicit evidence that the agency seeks someone on IČO/freelance/externally. */
+  hiringIco: boolean;
+  /** Short quote from that page proving `hiringIco`. */
+  hiringEvidence: string | null;
+  /** Hourly rate as written on their site (e.g. "500–700 Kč/h"), null if not published. */
+  hourlyRate: string | null;
+  rateMinCzk: number | null;
+  rateMaxCzk: number | null;
+  crawledAt: string | null;
 }
 
 export interface AgencyPatch {

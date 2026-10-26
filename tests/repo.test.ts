@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { openDb } from "../src/db";
-import { countOffersToScore, listAgencies, listOffers, offersToScore, saveFeedback, saveScore, seedAgencies, updateAgency } from "../src/repo";
+import { countOffersToScore, listAgencies, listOffers, offersToScore, saveAgencyCrawl, saveFeedback, saveScore, seedAgencies, updateAgency } from "../src/repo";
 
 let db: Database;
 let seq = 0;
@@ -159,6 +159,14 @@ describe("agencies", () => {
 
     expect(seedAgencies(db, items)).toEqual({ inserted: 0, updated: 0, skipped: 3 });
     expect(listAgencies(db).find((a) => a.name === "Beta")).toMatchObject({ status: "contacted", notes: "called" });
+
+    // Proven IČO hiring beats fit; a published rate beats no rate.
+    const crawl = { careersUrl: null, hiringEvidence: null, hourlyRate: null, rateMinCzk: null, rateMaxCzk: null, crawledAt: "t" };
+    const ids = Object.fromEntries(listAgencies(db).map((a) => [a.name, a.id]));
+    saveAgencyCrawl(db, ids.Gamma!, { ...crawl, hiringIco: true, hiringEvidence: "spolupráce na IČO" });
+    saveAgencyCrawl(db, ids.Beta!, { ...crawl, hiringIco: false, hourlyRate: "600 Kč/h", rateMinCzk: 600 });
+    expect(listAgencies(db).map((a) => a.name)).toEqual(["Gamma", "Beta", "Alpha"]);
+    expect(listAgencies(db)[0]).toMatchObject({ hiringIco: true, hiringEvidence: "spolupráce na IČO" });
   });
 
   test("reseed refreshes contact fields only and keeps status, notes and last contact", () => {

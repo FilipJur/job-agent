@@ -117,5 +117,13 @@ export function openDb(path: string): Database {
   addColumnIfMissing(db, "runs", "partial", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "runs", "detail_errors", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "agencies", "contact_url", "TEXT");
+  // Filled by the agency website crawl (src/agencies/crawl.ts).
+  addColumnIfMissing(db, "agencies", "careers_url", "TEXT");
+  addColumnIfMissing(db, "agencies", "hiring_ico", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(db, "agencies", "hiring_evidence", "TEXT");
+  addColumnIfMissing(db, "agencies", "hourly_rate", "TEXT");
+  addColumnIfMissing(db, "agencies", "rate_min_czk", "INTEGER");
+  addColumnIfMissing(db, "agencies", "rate_max_czk", "INTEGER");
+  addColumnIfMissing(db, "agencies", "crawled_at", "TEXT");
   return db;
 }

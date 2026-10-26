@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import type {
+  AgencyCrawl,
   AgencyPatch,
   AgencyRow,
   AgencySeed,
@@ -219,10 +220,18 @@ interface AgencyDbRow {
   last_contact_at: string | null;
   created_at: string;
   updated_at: string;
+  careers_url: string | null;
+  hiring_ico: number;
+  hiring_evidence: string | null;
+  hourly_rate: string | null;
+  rate_min_czk: number | null;
+  rate_max_czk: number | null;
+  crawled_at: string | null;
 }
 
 const AGENCY_COLS =
-  "id, name, web, city, focus, stack, signal, email, phone, contact_url, fit, status, notes, last_contact_at, created_at, updated_at";
+  "id, name, web, city, focus, stack, signal, email, phone, contact_url, fit, status, notes, last_contact_at, created_at, updated_at, " +
+  "careers_url, hiring_ico, hiring_evidence, hourly_rate, rate_min_czk, rate_max_czk, crawled_at";
 
 function toAgencyRow(r: AgencyDbRow): AgencyRow {
   return {
@@ -242,15 +251,43 @@ function toAgencyRow(r: AgencyDbRow): AgencyRow {
     lastContactAt: r.last_contact_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    careersUrl: r.careers_url,
+    hiringIco: r.hiring_ico === 1,
+    hiringEvidence: r.hiring_evidence,
+    hourlyRate: r.hourly_rate,
+    rateMinCzk: r.rate_min_czk,
+    rateMaxCzk: r.rate_max_czk,
+    crawledAt: r.crawled_at,
   };
 }
 
-/** Agencies ordered by fit desc, then name. */
+/** Proven IČO/freelance hiring first, then a published hourly rate, then fit, then name. */
 export function listAgencies(db: Database): AgencyRow[] {
   return db
-    .query<AgencyDbRow, []>(`SELECT ${AGENCY_COLS} FROM agencies ORDER BY fit DESC, name ASC`)
+    .query<AgencyDbRow, []>(
+      `SELECT ${AGENCY_COLS} FROM agencies
+       ORDER BY hiring_ico DESC, (rate_min_czk IS NULL AND rate_max_czk IS NULL) ASC, fit DESC, name ASC`,
+    )
     .all()
     .map(toAgencyRow);
+}
+
+/** Stores the result of one agency website crawl (replaces the previous crawl fields). */
+export function saveAgencyCrawl(db: Database, id: number, crawl: AgencyCrawl): void {
+  db.run(
+    `UPDATE agencies SET careers_url = ?, hiring_ico = ?, hiring_evidence = ?, hourly_rate = ?,
+       rate_min_czk = ?, rate_max_czk = ?, crawled_at = ? WHERE id = ?`,
+    [
+      crawl.careersUrl,
+      crawl.hiringIco ? 1 : 0,
+      crawl.hiringEvidence,
+      crawl.hourlyRate,
+      crawl.rateMinCzk,
+      crawl.rateMaxCzk,
+      crawl.crawledAt,
+      id,
+    ],
+  );
 }
 
 /** Updates status/notes/lastContactAt and stamps updated_at. */
