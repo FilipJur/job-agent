@@ -1,10 +1,44 @@
-import type { Database } from "bun:sqlite";
+import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "../src/db";
 
+/** Schema as it was before the `partial` columns existed. */
+const OLD_SCHEMA = `
+CREATE TABLE offers (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  source        TEXT NOT NULL,
+  source_id     TEXT NOT NULL,
+  url           TEXT NOT NULL,
+  title         TEXT NOT NULL,
+  company       TEXT,
+  location_text TEXT,
+  city          TEXT,
+  workplace     TEXT NOT NULL CHECK (workplace IN ('remote','hybrid','onsite','unknown')),
+  salary_min    INTEGER,
+  salary_max    INTEGER,
+  currency      TEXT,
+  published_at  TEXT,
+  description   TEXT NOT NULL,
+  dedup_key     TEXT NOT NULL,
+  first_seen_at TEXT NOT NULL,
+  last_seen_at  TEXT NOT NULL,
+  raw_json      TEXT NOT NULL,
+  UNIQUE (source, source_id)
+);
+CREATE TABLE runs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  source      TEXT NOT NULL,
+  started_at  TEXT NOT NULL,
+  finished_at TEXT,
+  status      TEXT CHECK (status IN ('ok','error')),
+  fetched     INTEGER NOT NULL DEFAULT 0,
+  new         INTEGER NOT NULL DEFAULT 0,
+  error       TEXT
+);
+`;
 function insertOffer(db: Database, sourceId = "1"): number {
   const row = db
     .query(
@@ -14,6 +48,7 @@ function insertOffer(db: Database, sourceId = "1"): number {
     .get(sourceId) as { id: number };
   return row.id;
 }
+
 
 describe("openDb on a file", () => {
   const dir = mkdtempSync(join(tmpdir(), "job-agent-db-"));
@@ -31,5 +66,29 @@ describe("openDb on a file", () => {
     const second = openDb(path);
     expect(second.query("SELECT COUNT(*) AS n FROM offers").get()).toEqual({ n: 1 });
     second.close();
+  });
+
+  test("opening a database created by the old schema adds partial columns and backfills offers", () => {
+    const oldPath = join(dir, "old.db");
+    const old = new Database(oldPath, { create: true });
+    old.run(OLD_SCHEMA);
+    const insert = old.prepare(
+      `INSERT INTO offers (source, source_id, url, title, workplace, description, dedup_key, first_seen_at, last_seen_at, raw_json)
+       VALUES ('jobscz', ?, 'u', 't', 'unknown', '', 'k', 't', 't', ?)`,
+    );
+    insert.run("og", '{"card":{},"detail":{"shape":"og"}}');
+    insert.run("jsonld", '{"card":{},"detail":{"shape":"jsonld"}}');
+    insert.run("no-detail", '{"card":{},"detailError":"HTTP 503"}');
+    old.run("INSERT INTO runs (source, started_at, status, fetched, new) VALUES ('jobscz', 't', 'ok', 2, 1)");
+    old.close();
+
+    const migrated = openDb(oldPath);
+    expect(migrated.query("SELECT source_id, partial FROM offers ORDER BY source_id").all()).toEqual([
+      { source_id: "jsonld", partial: 0 },
+      { source_id: "no-detail", partial: 1 },
+      { source_id: "og", partial: 1 },
+    ]);
+    expect(migrated.query("SELECT partial, detail_errors FROM runs").get()).toEqual({ partial: 0, detail_errors: 0 });
+    migrated.close();
   });
 });

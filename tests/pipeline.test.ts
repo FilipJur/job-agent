@@ -55,8 +55,8 @@ describe("runCollectors", () => {
     const summaries = await runCollectors(db, [bad, good], now);
 
     expect(summaries).toEqual([
-      { source: "bad", status: "error", fetched: 0, new: 0, error: "boom" },
-      { source: "good", status: "ok", fetched: 2, new: 2, error: null },
+      { source: "bad", status: "error", fetched: 0, new: 0, partial: 0, detailErrors: 0, error: "boom" },
+      { source: "good", status: "ok", fetched: 2, new: 2, partial: 0, detailErrors: 0, error: null },
     ]);
     const runs = db.query("SELECT source, status, error, fetched, new, finished_at FROM runs ORDER BY id").all();
     expect(runs).toEqual([
@@ -153,6 +153,19 @@ describe("runCollectors", () => {
     ]);
   });
 
+  test("a run counts partial offers and detail errors, independently", async () => {
+    const offers = [
+      raw({ sourceId: "r1", title: "Partial with error", partial: true, raw: { detailError: "HTTP 503" } }),
+      raw({ sourceId: "r2", title: "Partial, empty error", partial: true, raw: { detailError: "" } }),
+      raw({ sourceId: "r3", title: "Full with error", partial: false, raw: { detailError: "timeout" } }),
+      raw({ sourceId: "r4", title: "Full clean", partial: false, raw: { id: 4 } }),
+    ];
+
+    const summaries = await runCollectors(db, [fake("fake", offers)], now);
+
+    expect(summaries[0]).toMatchObject({ status: "ok", fetched: 4, new: 4, partial: 2, detailErrors: 2 });
+    expect(db.query("SELECT partial, detail_errors FROM runs").get()).toEqual({ partial: 2, detail_errors: 2 });
+  });
   test("a store failure rolls back the whole collector batch and records the error", async () => {
     const valid = raw({ sourceId: "30", title: "Valid" });
     const broken = raw({ sourceId: null as unknown as string, title: "Broken" });
@@ -163,5 +176,18 @@ describe("runCollectors", () => {
     expect(summaries[0]?.error).toContain("NOT NULL");
     expect(db.query("SELECT COUNT(*) AS n FROM offers").get()).toEqual({ n: 0 });
     expect(db.query("SELECT COUNT(*) AS n FROM offer_labels").get()).toEqual({ n: 0 });
+  });
+
+  test("a failed batch leaves partial and detail_errors at 0 on the run", async () => {
+    const valid = raw({ sourceId: "31", title: "Valid", partial: true, raw: { detailError: "HTTP 500" } });
+    const broken = raw({ sourceId: null as unknown as string, title: "Broken" });
+
+    await runCollectors(db, [fake("fake", [valid, broken])], now);
+
+    expect(db.query("SELECT status, partial, detail_errors FROM runs").get()).toEqual({
+      status: "error",
+      partial: 0,
+      detail_errors: 0,
+    });
   });
 });

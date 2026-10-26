@@ -1,13 +1,21 @@
 import type { Database, SQLQueryBindings } from "bun:sqlite";
 import { normalize } from "./normalize";
-import type { Collector, Offer } from "./types";
+import type { Collector, Offer, RawOffer } from "./types";
 
 export interface RunSummary {
   source: string;
   status: "ok" | "error";
   fetched: number;
   new: number;
+  partial: number;
+  detailErrors: number;
   error: string | null;
+}
+
+/** True when the collector recorded a per-offer detail failure in `raw.detailError`. */
+function hasDetailError({ raw }: RawOffer): boolean {
+  if (typeof raw !== "object" || raw === null || !("detailError" in raw)) return false;
+  return typeof raw.detailError === "string" && raw.detailError.length > 0;
 }
 
 /** Runs collectors one after another; a failing collector is recorded and the run continues. */
@@ -19,7 +27,9 @@ export async function runCollectors(
   const insertRun = db.prepare<{ id: number }, [string, string]>(
     "INSERT INTO runs (source, started_at) VALUES (?, ?) RETURNING id",
   );
-  const finishRun = db.prepare("UPDATE runs SET finished_at = ?, status = ?, fetched = ?, new = ?, error = ? WHERE id = ?");
+  const finishRun = db.prepare(
+    "UPDATE runs SET finished_at = ?, status = ?, fetched = ?, new = ?, error = ?, partial = ?, detail_errors = ? WHERE id = ?",
+  );
   const findBySourceId = db.prepare<{ id: number }, [string, string]>(
     "SELECT id FROM offers WHERE source = ? AND source_id = ?",
   );
@@ -77,17 +87,36 @@ export async function runCollectors(
   const summaries: RunSummary[] = [];
   for (const collector of collectors) {
     const runId = insertRun.get(collector.name, now().toISOString())!.id;
-    const summary: RunSummary = { source: collector.name, status: "ok", fetched: 0, new: 0, error: null };
+    const summary: RunSummary = {
+      source: collector.name,
+      status: "ok",
+      fetched: 0,
+      new: 0,
+      partial: 0,
+      detailErrors: 0,
+      error: null,
+    };
     try {
       const raw = await collector.collect();
       summary.fetched = raw.length;
       const offers = raw.map((r) => normalize(r));
       summary.new = storeBatch(offers, now().toISOString());
+      summary.partial = raw.filter((r) => r.partial === true).length;
+      summary.detailErrors = raw.filter(hasDetailError).length;
     } catch (err) {
       summary.status = "error";
       summary.error = err instanceof Error ? err.message : String(err);
     }
-    finishRun.run(now().toISOString(), summary.status, summary.fetched, summary.new, summary.error, runId);
+    finishRun.run(
+      now().toISOString(),
+      summary.status,
+      summary.fetched,
+      summary.new,
+      summary.error,
+      summary.partial,
+      summary.detailErrors,
+      runId,
+    );
     summaries.push(summary);
   }
   return summaries;
