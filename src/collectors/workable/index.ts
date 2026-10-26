@@ -1,6 +1,6 @@
 import config from "../../../config/workable.json";
 import type { Collector, FetchText, RawOffer } from "../../types";
-import { parseJobList, type WorkableJob } from "./api";
+import { parseJobList, type JobList, type WorkableJob } from "./api";
 import { htmlToText } from "./html";
 
 export type { FetchText } from "../../types";
@@ -97,8 +97,9 @@ export function createWorkableCollector(opts: WorkableOptions): Collector {
     name: SOURCE,
     async collect() {
       const offers = new Map<string, RawOffer>();
-      const errors: string[] = [];
       let attempts = 0;
+      let successes = 0;
+      let lastError = "";
 
       for (const query of queries) {
         // The plain query usually covers remote offers; the explicit workplace=remote pass is deduped by id below.
@@ -107,13 +108,14 @@ export function createWorkableCollector(opts: WorkableOptions): Collector {
           for (let page = 0; page < maxPages; page++) {
             const url = urlFor(query, remote, pageToken);
             attempts++;
-            let list;
+            let list: JobList;
             try {
               const res = await fetchText(url);
               if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
               list = parseJobList(res.body);
+              successes++;
             } catch (e) {
-              errors.push(`${url}: ${e instanceof Error ? e.message : String(e)}`);
+              lastError = `${url}: ${e instanceof Error ? e.message : String(e)}`;
               break;
             }
             for (const job of list.jobs) {
@@ -127,8 +129,8 @@ export function createWorkableCollector(opts: WorkableOptions): Collector {
         }
       }
 
-      if (attempts > 0 && errors.length === attempts) {
-        throw new Error(`all ${attempts} Workable API requests failed; first: ${errors[0]}`);
+      if (attempts > 0 && successes === 0) {
+        throw new Error(`all ${attempts} Workable API requests failed; last: ${lastError}`);
       }
       return [...offers.values()];
     },
