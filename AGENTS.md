@@ -27,6 +27,7 @@ Goals, scope, sources and roadmap: `docs/VISION.md`. Read it before starting a s
 - Development never runs a full live collect; use `HTTP_MODE=replay` (shared cache: `HTTP_CACHE_DIR=/Users/filip/projects/job-agent/data/http-cache`) and live smoke runs only with `--limit 5`.
 - Secrets live only in `.env` (gitignored). Never commit, log, or print keys.
 - `data/profile.md` belongs to the user; agents write it only when the user asks. `profile.md` in the repo is the default template.
+- `data/jobs.db` is shared by the `web` and `cli` containers through a bind mount. Never open the production DB from the host (sqlite3, bun) while a container runs: host and container do not share SQLite locks. Inspect it through `docker compose run --rm cli …` or stop the containers first. No WAL (rollback journal only).
 
 ## Workflow
 - Work on the slice given in the task prompt only; do not start the next slice.

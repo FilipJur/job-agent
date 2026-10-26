@@ -67,6 +67,12 @@ git pull && docker compose build && docker compose up -d web
 
 ## Backup
 
+The containers and the host do not share SQLite locks, so stop them before touching `data/jobs.db` from the host:
+
 ```sh
+docker compose stop web
 sqlite3 data/jobs.db ".backup 'data/jobs.db.$(date +%F).bak'"
+docker compose start web
 ```
+
+Do not back up while a `cli` run (daily) is in progress.
