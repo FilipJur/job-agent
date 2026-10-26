@@ -100,6 +100,25 @@ describe("jobs.cz collector", () => {
     expect(failed?.raw).toMatchObject({ detail: null, detailError: "boom" });
   });
 
+  test("known card ids skip the detail fetch and reuse SERP data", async () => {
+    const site = jobsCz();
+    const known = cards.find((c) => c.sourceId === jsonldId);
+    const offers = await createJobsCzCollector({
+      keywords: ["AI engineer"],
+      fetchText: site.fetchText,
+      now: () => NOW,
+      isKnown: (id) => id === jsonldId,
+    }).collect();
+
+    expect(site.calls.some((u) => u.includes(`/rpd/${jsonldId}/`))).toBe(false);
+    expect(site.calls.filter((u) => u.includes("/rpd/")).length).toBe(UNIQUE - 1);
+    const offer = offers.find((o) => o.sourceId === jsonldId);
+    expect(offer?.partial).toBe(true);
+    expect(offer?.description).toBe("");
+    expect(offer?.title).toBe(known?.title);
+    expect(offer?.company).toBe(known?.company ?? null);
+  });
+
   test("throws when all SERP requests fail (first error summarised)", async () => {
     const site = jobsCz(() => {
       throw new Error("network down");

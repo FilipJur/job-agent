@@ -23,7 +23,7 @@ Goals, scope, sources and roadmap: `docs/VISION.md`. Read it before starting a s
 ## Gotchas
 - jobs.cz `/prace/<city>/` applies a 50 km radius; verify the real location from the offer detail.
 - Strip `utm_*`, `gclid`, `_gl` from URLs before dedup.
-- Respect robots.txt; at most one run per day per source.
+- Development never runs a full live collect; use `HTTP_MODE=replay` (shared cache: `HTTP_CACHE_DIR=/Users/filip/projects/job-agent/data/http-cache`) and live smoke runs only with `--limit 5`.
 - Secrets live only in `.env` (gitignored). Never commit, log, or print keys.
 
 ## Workflow
