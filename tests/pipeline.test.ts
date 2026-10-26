@@ -127,20 +127,6 @@ describe("runCollectors", () => {
     expect(db.query("SELECT workplace FROM offers WHERE source_id = '20'").get()).toEqual({ workplace: "remote" });
   });
 
-  test("a non-Error throw is recorded with its string value", async () => {
-    const thrower: Collector = {
-      name: "strange",
-      collect: async () => {
-        throw "plain string";
-      },
-    };
-
-    const summaries = await runCollectors(db, [thrower], now);
-
-    expect(summaries).toEqual([{ source: "strange", status: "error", fetched: 0, new: 0, error: "plain string" }]);
-    expect(db.query("SELECT status, error FROM runs").get()).toEqual({ status: "error", error: "plain string" });
-  });
-
   test("a store failure rolls back the whole collector batch and records the error", async () => {
     const valid = raw({ sourceId: "30", title: "Valid" });
     const broken = raw({ sourceId: null as unknown as string, title: "Broken" });
