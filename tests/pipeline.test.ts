@@ -1,0 +1,155 @@
+import type { Database } from "bun:sqlite";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { openDb } from "../src/db";
+import { runCollectors } from "../src/pipeline";
+import type { Collector, RawOffer } from "../src/types";
+
+function raw(over: Partial<RawOffer> = {}): RawOffer {
+  return {
+    source: "fake",
+    sourceId: "1",
+    url: "https://www.jobs.cz/rpd/1/?rps=2&utm_source=x",
+    title: "AI Engineer",
+    company: "Acme s.r.o.",
+    locationText: "Praha – Michle",
+    city: "Praha",
+    salaryMin: 90000,
+    salaryMax: 120000,
+    currency: "CZK",
+    publishedAt: null,
+    description: "Popis nabídky",
+    tags: [],
+    partial: false,
+    raw: { id: 1 },
+    ...over,
+  };
+}
+
+function fake(name: string, offers: RawOffer[]): Collector {
+  return { name, collect: async () => offers };
+}
+
+let db: Database;
+let clock: Date;
+const now = () => clock;
+
+beforeEach(() => {
+  db = openDb(":memory:");
+  clock = new Date("2026-10-26T08:00:00Z");
+});
+
+afterEach(() => {
+  db.close();
+});
+
+describe("runCollectors", () => {
+  test("a throwing collector is recorded as error and the next collector still runs", async () => {
+    const bad: Collector = {
+      name: "bad",
+      collect: async () => {
+        throw new Error("boom");
+      },
+    };
+    const good = fake("good", [raw({ source: "good", sourceId: "a", title: "A" }), raw({ source: "good", sourceId: "b", title: "B" })]);
+
+    const summaries = await runCollectors(db, [bad, good], now);
+
+    expect(summaries).toEqual([
+      { source: "bad", status: "error", fetched: 0, new: 0, error: "boom" },
+      { source: "good", status: "ok", fetched: 2, new: 2, error: null },
+    ]);
+    const runs = db.query("SELECT source, status, error, fetched, new, finished_at FROM runs ORDER BY id").all();
+    expect(runs).toEqual([
+      { source: "bad", status: "error", error: "boom", fetched: 0, new: 0, finished_at: "2026-10-26T08:00:00.000Z" },
+      { source: "good", status: "ok", error: null, fetched: 2, new: 2, finished_at: "2026-10-26T08:00:00.000Z" },
+    ]);
+    expect(db.query("SELECT COUNT(*) AS n FROM offers").get()).toEqual({ n: 2 });
+  });
+
+  test("running the same collector twice creates no duplicates and only bumps last_seen_at", async () => {
+    const c = fake("fake", [raw()]);
+
+    const first = await runCollectors(db, [c], now);
+    clock = new Date("2026-10-27T09:30:00Z");
+    const second = await runCollectors(db, [c], now);
+
+    expect(first[0]).toMatchObject({ status: "ok", fetched: 1, new: 1 });
+    expect(second[0]).toMatchObject({ status: "ok", fetched: 1, new: 0 });
+    const rows = db.query("SELECT first_seen_at, last_seen_at, url FROM offers").all();
+    expect(rows).toEqual([
+      {
+        first_seen_at: "2026-10-26T08:00:00.000Z",
+        last_seen_at: "2026-10-27T09:30:00.000Z",
+        url: "https://www.jobs.cz/rpd/1/",
+      },
+    ]);
+  });
+
+  test("the same source_id twice within one batch is stored once", async () => {
+    const dup = raw({ sourceId: "7", title: "Dup" });
+    const summaries = await runCollectors(db, [fake("fake", [dup, { ...dup }])], now);
+
+    expect(summaries[0]).toMatchObject({ status: "ok", fetched: 2, new: 1 });
+    expect(db.query("SELECT source_id FROM offers").all()).toEqual([{ source_id: "7" }]);
+  });
+
+  test("a repost with a different source_id and same title/company/city is not inserted again", async () => {
+    const original = raw({ sourceId: "10", title: "AI Engineer", company: "Acme s.r.o.", city: "Praha" });
+    const repost = raw({ sourceId: "11", title: "AI engineer", company: "Acme", city: "Praha" });
+
+    const summaries = await runCollectors(db, [fake("fake", [original]), fake("fake", [repost])], now);
+
+    expect(summaries.map((s) => s.new)).toEqual([1, 0]);
+    expect(db.query("SELECT source_id FROM offers").all()).toEqual([{ source_id: "10" }]);
+  });
+
+  test("rule labels are stored with origin 'rule' and set workplace", async () => {
+    const offer = raw({
+      sourceId: "20",
+      city: "Brno",
+      tags: ["Práce převážně z domova"],
+      description: "Nabízíme HPP i IČO spolupráci",
+    });
+
+    await runCollectors(db, [fake("fake", [offer])], now);
+
+    const labels = db
+      .query(
+        `SELECT l.label, l.origin FROM offer_labels l JOIN offers o ON o.id = l.offer_id
+         WHERE o.source_id = '20' ORDER BY l.label`,
+      )
+      .all();
+    expect(labels).toEqual([
+      { label: "hpp", origin: "rule" },
+      { label: "ico", origin: "rule" },
+      { label: "remote", origin: "rule" },
+    ]);
+    expect(db.query("SELECT workplace FROM offers WHERE source_id = '20'").get()).toEqual({ workplace: "remote" });
+  });
+
+  test("a non-Error throw is recorded with its string value", async () => {
+    const thrower: Collector = {
+      name: "strange",
+      collect: async () => {
+        throw "plain string";
+      },
+    };
+
+    const summaries = await runCollectors(db, [thrower], now);
+
+    expect(summaries).toEqual([{ source: "strange", status: "error", fetched: 0, new: 0, error: "plain string" }]);
+    expect(db.query("SELECT status, error FROM runs").get()).toEqual({ status: "error", error: "plain string" });
+  });
+
+  test("a store failure rolls back the whole collector batch and records the error", async () => {
+    const valid = raw({ sourceId: "30", title: "Valid" });
+    const broken = raw({ sourceId: null as unknown as string, title: "Broken" });
+
+    const summaries = await runCollectors(db, [fake("fake", [valid, broken])], now);
+
+    expect(summaries[0]).toMatchObject({ status: "error", fetched: 2, new: 0 });
+    expect(summaries[0]?.error).toContain("NOT NULL");
+    expect(db.query("SELECT COUNT(*) AS n FROM offers").get()).toEqual({ n: 0 });
+    expect(db.query("SELECT COUNT(*) AS n FROM offer_labels").get()).toEqual({ n: 0 });
+  });
+});
