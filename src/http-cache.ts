@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-
-export type FetchText = (url: string) => Promise<{ status: number; url: string; body: string }>;
+import type { FetchText } from "./types";
 
 export type HttpMode = "live" | "record" | "replay";
 
@@ -37,15 +36,7 @@ export function createCachedFetch(inner: FetchText, opts: { mode: HttpMode; dir:
     } catch {
       throw new Error(`http-cache miss (replay mode, no network): ${url}`);
     }
-    let entry: CacheEntry;
-    try {
-      entry = JSON.parse(text) as CacheEntry;
-    } catch {
-      throw new Error(`http-cache corrupt entry for ${url}: ${pathFor(url)}`);
-    }
-    if (typeof entry.status !== "number" || typeof entry.body !== "string" || typeof entry.finalUrl !== "string") {
-      throw new Error(`http-cache corrupt entry for ${url}: ${pathFor(url)}`);
-    }
+    const entry = JSON.parse(text) as CacheEntry;
     return { status: entry.status, url: entry.finalUrl, body: entry.body };
   };
 }

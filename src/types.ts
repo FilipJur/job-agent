@@ -1,6 +1,9 @@
 export type Workplace = "remote" | "hybrid" | "onsite" | "unknown";
 export type LabelOrigin = "rule" | "llm";
 
+/** Fetches a URL as text: the shape shared by the HTTP client, the cache wrapper and test fakes. */
+export type FetchText = (url: string) => Promise<{ status: number; url: string; body: string }>;
+
 /** What a collector emits: source data as found, before normalization. */
 export interface RawOffer {
   source: string;

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { createCachedFetch, type FetchText } from "../src/http-cache";
+import { createCachedFetch } from "../src/http-cache";
+import type { FetchText } from "../src/types";
 
 /** Fake fetcher: records every call, answers with a distinctive body so mixing up entries is visible. */
 const fake = (calls: string[]): FetchText => async (url) => {
