@@ -92,7 +92,9 @@ describe("offers API", () => {
   });
 
   test("static misses and escaping paths are plain 404", async () => {
-    for (const path of ["/missing.js", "/%2e%2e/%2e%2e/etc/passwd"]) {
+    // Note: %2e is dot-normalized by the URL parser before handle() sees it,
+    // so traversal uses %2f which survives parsing and reaches the guard.
+    for (const path of ["/missing.js", "/..%2f..%2fetc%2fpasswd"]) {
       const res = await handle(new Request(`http://localhost${path}`), db);
       expect(res.status).toBe(404);
       expect(res.headers.get("content-type")).toContain("text/plain");
