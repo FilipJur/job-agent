@@ -30,8 +30,13 @@ function AgencyTableRow({ agency, saving, onSave }: AgencyRowProps) {
         ) : (
           agency.name
         )}
-        {(agency.email !== null || agency.phone !== null) && (
+        {(agency.contactUrl !== null || agency.email !== null || agency.phone !== null) && (
           <span className="contact">
+            {agency.contactUrl !== null && (
+              <a href={withHttps(agency.contactUrl)} target="_blank" rel="noreferrer noopener">
+                Kontaktní formulář
+              </a>
+            )}
             {agency.email !== null && <a href={`mailto:${agency.email}`}>{agency.email}</a>}
             {agency.phone !== null && <a href={`tel:${agency.phone.replace(/\s+/g, "")}`}>{agency.phone}</a>}
           </span>

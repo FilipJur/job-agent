@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { openDb } from "../src/db";
 import { listAgencies, seedAgencies } from "../src/repo";
+import { profileHashOf } from "../src/scoring/run";
 import { handle } from "../src/web/server";
 
 let db: Database;
@@ -112,5 +113,24 @@ describe("agencies API", () => {
 
     const [listed] = (await call("/api/agencies")).body;
     expect(listed).toMatchObject({ id, ...patch, createdAt: expect.any(String) });
+  });
+});
+
+describe("profile API", () => {
+  test("GET returns text and pending, PUT writes the file", async () => {
+    const previous = process.env.PROFILE_PATH;
+    process.env.PROFILE_PATH = "/tmp/job-agent-web-profile-test.md";
+    try {
+      await Bun.write(process.env.PROFILE_PATH, "profile v1");
+      const id = offer(["hpp"]);
+      expect(await call("/api/profile")).toMatchObject({ status: 200, body: { text: "profile v1", pending: 1 } });
+      expect(await send("PUT", "/api/profile", { text: "profile v2" })).toMatchObject({ status: 200, body: { text: "profile v2", pending: 1 } });
+      db.run("INSERT INTO offer_scores (offer_id, score, reason, gaps, model, profile_hash, scored_at) VALUES (?, 8, '', '', 't', ?, 't')", [id, profileHashOf("profile v2")]);
+      expect(await call("/api/profile")).toMatchObject({ status: 200, body: { text: "profile v2", pending: 0 } });
+      expect((await send("PUT", "/api/profile", {})).status).toBe(400);
+    } finally {
+      if (previous === undefined) delete process.env.PROFILE_PATH;
+      else process.env.PROFILE_PATH = previous;
+    }
   });
 });

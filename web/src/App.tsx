@@ -1,17 +1,19 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchAgencies, fetchOffers, patchAgency, saveFeedback } from "./api";
 import type { OfferFilters } from "./api";
 import { AgenciesView } from "./AgenciesView";
 import { agencyCount, offerCount } from "./format";
 import { OffersView } from "./OffersView";
+import { ProfileView } from "./ProfileView";
 import type { AgencyPatch, AgencyRow, OfferRow, Tab, Verdict } from "./types";
 
-type View = Tab | "agencies";
+type View = Tab | "agencies" | "profile";
 
 const TABS: { key: View; label: string }[] = [
   { key: "hpp", label: "HPP" },
   { key: "kontrakty", label: "Kontrakty" },
   { key: "agencies", label: "Agentury" },
+  { key: "profile", label: "Profil" },
 ];
 
 const NO_FILTERS: OfferFilters = { onlyNew: false, remote: false, olomouc: false, hidden: false };
@@ -26,8 +28,13 @@ export function App() {
   const [pendingOffer, setPendingOffer] = useState<number | null>(null);
   const [savingAgency, setSavingAgency] = useState<number | null>(null);
   const [reload, setReload] = useState(0);
+  const showError = useCallback((message: string) => setError(message), []);
 
   useEffect(() => {
+    if (view === "profile") {
+      setLoading(false);
+      return;
+    }
     const controller = new AbortController();
     setLoading(true);
     setError(null);
@@ -103,7 +110,7 @@ export function App() {
       </header>
 
       <main className="app-main">
-        {view !== "agencies" && (
+        {view !== "agencies" && view !== "profile" && (
           <div className="filters" role="group" aria-label="Filtry nabídek">
             <button
               type="button"
@@ -161,12 +168,16 @@ export function App() {
               ? agencies === null
                 ? ""
                 : agencyCount(agencies.length)
-              : offers === null
+              : view === "profile"
                 ? ""
-                : offerCount(offers.length)}
+                : offers === null
+                  ? ""
+                  : offerCount(offers.length)}
         </p>
 
-        {view === "agencies" ? (
+        {view === "profile" ? (
+          <ProfileView onError={showError} />
+        ) : view === "agencies" ? (
           <AgenciesView
             agencies={agencies}
             savingId={savingAgency}

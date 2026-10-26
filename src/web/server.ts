@@ -1,7 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { join, resolve, sep } from "node:path";
 import { openDb } from "../db";
-import { listAgencies, listOffers, saveFeedback, updateAgency } from "../repo";
+import { readProfile, writeProfile } from "../profile";
+import { countOffersToScore, listAgencies, listOffers, saveFeedback, updateAgency } from "../repo";
+import { profileHashOf } from "../scoring/run";
 import type { AgencyPatch, AgencyStatus } from "../types";
 
 /** Paths and values are fixed by the API contract in docs; keep them in one place. */
@@ -104,6 +106,19 @@ async function patchAgency(req: Request, db: Database, id: number): Promise<Resp
   return json(Object.keys(patch).length === 0 ? agency : updateAgency(db, id, patch));
 }
 
+function profileStatus(db: Database): Response {
+  const text = readProfile();
+  return json({ text, pending: countOffersToScore(db, profileHashOf(text)) });
+}
+
+async function putProfile(req: Request, db: Database): Promise<Response> {
+  const parsed = await readObject(req);
+  if (!parsed.ok) return parsed.response;
+  if (typeof parsed.body.text !== "string") return fail(400, "text must be a string");
+  writeProfile(parsed.body.text);
+  return profileStatus(db);
+}
+
 const UI_MISSING = "web UI is not built: run `bun run web:build`";
 
 /** Serves `web/dist`, falling back to index.html for app routes; the API keeps working without a build. */
@@ -155,6 +170,11 @@ async function route(req: Request, db: Database): Promise<Response> {
   }
   if (path === "/api/agencies") {
     return method === "GET" || method === "HEAD" ? json(listAgencies(db)) : fail(405, "use GET");
+  }
+  if (path === "/api/profile") {
+    if (method === "GET" || method === "HEAD") return profileStatus(db);
+    if (method === "PUT") return putProfile(req, db);
+    return fail(405, "use GET or PUT");
   }
   const agency = /^\/api\/agencies\/([^/]+)$/.exec(path);
   if (agency) {

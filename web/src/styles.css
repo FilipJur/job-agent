@@ -428,6 +428,34 @@ h1 {
   padding: 6px 4px;
 }
 
+.profile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profile-text {
+  width: 100%;
+  min-height: 300px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 0.85rem;
+  resize: vertical;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 @media (min-width: 900px) {
   .offers {
     grid-template-columns: 1fr 1fr;
