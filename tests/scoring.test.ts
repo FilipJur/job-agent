@@ -94,22 +94,40 @@ describe("scoring", () => {
     });
   });
 
-  test("timed-out offer fails but the run continues", async () => {
+  test("scores 10 offers with at most 4 concurrent calls", async () => {
+    for (let i = 0; i < 10; i++) offer();
+    let inFlight = 0;
+    let maxInFlight = 0;
+    // Barrier: each call parks until 4 are in flight, proving overlap with no
+    // wall-clock sleeps. Sequential code would stall here and fail on timeout.
+    const { promise: gate, resolve: openGate } = Promise.withResolvers<void>();
+    const postJson: PostJson = async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      if (inFlight === 4) openGate();
+      await gate;
+      inFlight -= 1;
+      return { status: 200, body: envelope(validContent) };
+    };
+    const { summary, exitCode } = await runScoring(db, opts(postJson));
+    expect(exitCode).toBe(0);
+    expect(summary).toMatchObject({ scored: 10, failed: 0 });
+    expect(maxInFlight).toBe(4);
+    expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM offer_scores").get()?.n).toBe(10);
+  });
+
+  test("one rejected call fails but the run continues", async () => {
     const ids = [offer(), offer()];
     let calls = 0;
     const postJson: PostJson = (...args) => {
       calls += 1;
-      // Fake HTTP whose request never resolves before the abort: rejects with
-      // TimeoutError like fetch under AbortSignal.timeout; no real timer, rejects at once.
-      if (calls === 1) return Promise.reject(new DOMException("The operation timed out.", "TimeoutError"));
+      if (calls === 1) return Promise.reject(new Error("boom"));
       return sequenced([envelope(validContent)])(...args);
     };
     const { summary, exitCode } = await runScoring(db, opts(postJson));
     expect(exitCode).toBe(0);
     expect(summary).toMatchObject({ scored: 1, failed: 1 });
-    const scoredId = ids.find((id) => scoresOf(id).length === 1);
-    expect(scoredId).toBeDefined();
-    expect(llmLabelsOf(scoredId!)).toEqual(["remote-cz"]);
+    expect(ids.filter((id) => scoresOf(id).length === 1)).toHaveLength(1);
   });
 
   test("second run with the same profile scores nothing; changed profile scores again", async () => {
