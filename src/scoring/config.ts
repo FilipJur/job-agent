@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readProfile } from "../profile";
 
 export interface ScoringConfig {
   model: string;
@@ -16,6 +17,6 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 export function loadScoringConfig(): { config: ScoringConfig; profile: string } {
   const config = JSON.parse(readFileSync(join(root, "config", "scoring.json"), "utf8")) as ScoringConfig;
-  const profile = readFileSync(join(root, "profile.md"), "utf8");
+  const profile = readProfile();
   return { config, profile };
 }

@@ -120,6 +120,7 @@ export interface AgencyRow {
   stack: string | null;
   signal: string | null;
   email: string | null;
+  contactUrl: string | null;
   phone: string | null;
   fit: number;
   status: AgencyStatus;
@@ -144,5 +145,6 @@ export interface AgencySeed {
   signal: string | null;
   email: string | null;
   phone: string | null;
+  contact_url?: string | null;
   fit: number;
 }

@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { openDb } from "../src/db";
-import { listAgencies, listOffers, offersToScore, saveFeedback, saveScore, seedAgencies, updateAgency } from "../src/repo";
+import { countOffersToScore, listAgencies, listOffers, offersToScore, saveFeedback, saveScore, seedAgencies, updateAgency } from "../src/repo";
 
 let db: Database;
 let seq = 0;
@@ -119,6 +119,16 @@ describe("offersToScore", () => {
     expect(offersToScore(db, { profileHash: "p1" }).find((o) => o.title === "excluded")).toBeUndefined();
   });
 
+  test("countOffersToScore matches offersToScore length with and without existing scores", () => {
+    const a = offer();
+    offer();
+    offer({ labels: ["excluded"] });
+    expect(countOffersToScore(db, "p1")).toBe(offersToScore(db, { profileHash: "p1" }).length);
+    scored(a, 5, "2026-10-26T11:00:00.000Z", "p1");
+    expect(countOffersToScore(db, "p1")).toBe(1);
+    expect(countOffersToScore(db, "p1")).toBe(offersToScore(db, { profileHash: "p1" }).length);
+  });
+
   test("saveScore stores the row and llm labels; saveFeedback stores the verdict", () => {
     const id = offer();
     saveScore(db, { offerId: id, score: 7.5, reason: "r", gaps: "g", model: "m", profileHash: "p1", scoredAt: "2026-10-26T11:00:00.000Z", labels: ["ai-first"] });
@@ -140,14 +150,31 @@ describe("agencies", () => {
   ];
 
   test("lists fit desc then name; update edits status/notes/contact; reseed inserts 0 and keeps edits", () => {
-    expect(seedAgencies(db, items)).toEqual({ inserted: 3, skipped: 0 });
+    expect(seedAgencies(db, items)).toEqual({ inserted: 3, updated: 0, skipped: 0 });
     expect(listAgencies(db).map((a) => a.name)).toEqual(["Alpha", "Beta", "Gamma"]);
 
     const beta = listAgencies(db).find((a) => a.name === "Beta")!;
     const updated = updateAgency(db, beta.id, { status: "contacted", notes: "called", lastContactAt: "2026-10-26" });
     expect(updated).toMatchObject({ status: "contacted", notes: "called", lastContactAt: "2026-10-26" });
 
-    expect(seedAgencies(db, items)).toEqual({ inserted: 0, skipped: 3 });
+    expect(seedAgencies(db, items)).toEqual({ inserted: 0, updated: 0, skipped: 3 });
     expect(listAgencies(db).find((a) => a.name === "Beta")).toMatchObject({ status: "contacted", notes: "called" });
+  });
+
+  test("reseed refreshes contact fields only and keeps status, notes and last contact", () => {
+    seedAgencies(db, items);
+    const beta = listAgencies(db).find((a) => a.name === "Beta")!;
+    updateAgency(db, beta.id, { status: "replied", notes: "n", lastContactAt: "2026-10-26" });
+
+    const changed = items.map((a) => (a.name === "Beta" ? { ...a, contact_url: "https://beta.test/kontakt", email: "x@beta.test", focus: "new focus" } : a));
+    expect(seedAgencies(db, changed)).toEqual({ inserted: 0, updated: 1, skipped: 2 });
+    expect(listAgencies(db).find((a) => a.name === "Beta")).toMatchObject({
+      contactUrl: "https://beta.test/kontakt",
+      email: "x@beta.test",
+      focus: null,
+      status: "replied",
+      notes: "n",
+      lastContactAt: "2026-10-26",
+    });
   });
 });
