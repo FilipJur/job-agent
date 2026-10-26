@@ -11,7 +11,6 @@ const job = (title: string) => {
   return found;
 };
 
-
 /** Fake API: page 1 is the saved fixture (plus `token` when set), a token request serves the single `page2Id` job. */
 function fakeApi(opts: { token?: string; page2Id?: string; status?: number } = {}) {
   const calls: string[] = [];
@@ -19,8 +18,13 @@ function fakeApi(opts: { token?: string; page2Id?: string; status?: number } = {
     calls.push(url);
     if (opts.status) return { status: opts.status, url, body: "{}" };
     const sent = new URL(url).searchParams.get("pageToken");
-    if (sent === null) return { status: 200, url, body: opts.token ? JSON.stringify({ ...JSON.parse(body), nextPageToken: opts.token }) : body };
-    return { status: 200, url, body: JSON.stringify({ jobs: [fixture.jobs.find((j) => j.id === opts.page2Id)], totalSize: 1 }) };
+    if (sent === null) {
+      if (!opts.token) return { status: 200, url, body };
+      const page = { ...JSON.parse(body), nextPageToken: opts.token };
+      return { status: 200, url, body: JSON.stringify(page) };
+    }
+    const jobs = fixture.jobs.filter((j) => j.id === opts.page2Id);
+    return { status: 200, url, body: JSON.stringify({ jobs, totalSize: jobs.length }) };
   };
   return { fetchText, calls };
 }
