@@ -41,6 +41,7 @@ export interface Offer {
   tags: string[];
   labels: string[];
   rawJson: string;
+  partial: boolean;
 }
 
 export interface Collector {

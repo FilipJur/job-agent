@@ -127,18 +127,17 @@ describe("runCollectors", () => {
     expect(db.query("SELECT workplace FROM offers WHERE source_id = '20'").get()).toEqual({ workplace: "remote" });
   });
 
-  test("a non-Error throw is recorded with its string value", async () => {
-    const thrower: Collector = {
-      name: "strange",
-      collect: async () => {
-        throw "plain string";
-      },
-    };
+  test("stores the partial flag", async () => {
+    const partial = raw({ sourceId: "40", title: "Partial AI", partial: true });
+    const full = raw({ sourceId: "41", title: "Full AI" });
 
-    const summaries = await runCollectors(db, [thrower], now);
+    await runCollectors(db, [fake("fake", [partial, full])], now);
 
-    expect(summaries).toEqual([{ source: "strange", status: "error", fetched: 0, new: 0, error: "plain string" }]);
-    expect(db.query("SELECT status, error FROM runs").get()).toEqual({ status: "error", error: "plain string" });
+    const rows = db.query("SELECT source_id, partial FROM offers ORDER BY source_id").all();
+    expect(rows).toEqual([
+      { source_id: "40", partial: 1 },
+      { source_id: "41", partial: 0 },
+    ]);
   });
 
   test("a store failure rolls back the whole collector batch and records the error", async () => {

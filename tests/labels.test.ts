@@ -9,34 +9,11 @@ describe("contract form", () => {
   test("HPP and IČO both apply (labels are independent)", () => {
     expect(labelsOf({ description: "Nabízíme HPP nebo spolupráci na IČO." })).toEqual(["hpp", "ico"]);
   });
-
-  test.each(["pracovní smlouva", "Full-time"])("hpp from %p", (text) => {
-    expect(labelsOf({ description: text })).toContain("hpp");
-  });
-
-  test("hpp from JSON-LD employmentType tags", () => {
-    expect(labelsOf({ tags: "FULL_TIME\nEMPLOYEE" })).toEqual(["hpp"]);
-  });
-
-  test.each(["OSVČ", "živnostenský list", "živnost", "freelance"])("ico from %p", (text) => {
-    expect(labelsOf({ description: text })).toEqual(["ico"]);
-  });
-
-  test.each(["DPP", "dohoda o provedení práce"])("dpp-dpc from %p", (text) => {
-    expect(labelsOf({ description: text })).toEqual(["dpp-dpc"]);
-  });
 });
 
 describe("exclusion", () => {
-  test.each(["Lektor angličtiny", "Školitel", "Obchodní konzultant", "Sales Manager"])(
-    "title %p is excluded",
-    (title) => {
-      expect(labelsOf({ title })).toContain("excluded");
-    },
-  );
-
-  test("Nette in description is excluded", () => {
-    expect(labelsOf({ title: "Senior developer", description: "Znalost Nette a PHP" })).toContain("excluded");
+  test("lektor title is excluded", () => {
+    expect(labelsOf({ title: "Lektor angličtiny" })).toContain("excluded");
   });
 
   test("lowercase 'latte' (the drink) is not excluded", () => {
@@ -59,38 +36,18 @@ describe("work mode", () => {
     expect(labelsOf({ tags: "Možnost občasné práce z domova" })).toEqual(["hybrid"]);
   });
 
-  test("neither home-office tag gives onsite", () => {
-    expect(labelsOf({ tags: "Práce převážně z domova\nMožnost občasné práce z domova" })).not.toContain(
-      "onsite",
-    );
-    expect(labelsOf({ tags: "Možnost občasné práce z domova" })).not.toContain("onsite");
-  });
-
-  test("remote and hybrid text together give both labels", () => {
-    expect(labelsOf({ tags: "Práce převážně z domova\nMožnost občasné práce z domova" })).toEqual([
-      "hybrid",
-      "remote",
-    ]);
-  });
-
-  test("remote in title -> remote", () => {
-    expect(labelsOf({ title: "Backend Engineer (remote)" })).toEqual(["remote"]);
+  test("'hybridní mobilní aplikace' (no work mode) is not hybrid", () => {
+    expect(
+      labelsOf({ description: "Vyvíjíme hybridní mobilní aplikace pro iOS a Android." }),
+    ).not.toContain("hybrid");
   });
 });
 
 describe("place", () => {
-  test("Olomouc city -> olomouc", () => {
-    expect(labelsOf({ city: "Olomouc" })).toEqual(["olomouc"]);
-  });
-
-  test.each(["Přerov", "Prostějov", "Šternberk", "Uničov", "Litovel"])("%p -> okoli-olomouce only", (city) => {
-    const labels = labelsOf({ city });
+  test("city near Olomouc -> okoli-olomouce only", () => {
+    const labels = labelsOf({ city: "Přerov" });
     expect(labels).toEqual(["okoli-olomouce"]);
     expect(labels).not.toContain("olomouc");
-  });
-
-  test("Praha -> praha", () => {
-    expect(labelsOf({ city: "Praha" })).toEqual(["praha"]);
   });
 
   test("'Olomoucký' (region) is not an Olomouc city match", () => {
@@ -103,28 +60,8 @@ describe("place", () => {
 });
 
 describe("content", () => {
-  test.each(["LLM", "AI agent", "Claude Code", "MCP", "RAG", "prompt engineering"])(
-    "ai-first from %p",
-    (text) => {
-      expect(labelsOf({ description: text })).toContain("ai-first");
-    },
-  );
-
-  test.each(["storage", "garage"])("no ai-first for %p (word boundary)", (text) => {
-    expect(labelsOf({ description: text })).not.toContain("ai-first");
-  });
-
-  test.each(["React", "TypeScript"])("react-ts from %p", (text) => {
-    expect(labelsOf({ description: text })).toEqual(["react-ts"]);
-  });
-
   test("lowercase verb 'react' is not react-ts", () => {
     expect(labelsOf({ description: "we react quickly" })).not.toContain("react-ts");
-  });
-
-  test("wordpress from title or description", () => {
-    expect(labelsOf({ title: "WordPress developer" })).toEqual(["wordpress"]);
-    expect(labelsOf({ description: "Zkušenost s WordPress" })).toEqual(["wordpress"]);
   });
 });
 

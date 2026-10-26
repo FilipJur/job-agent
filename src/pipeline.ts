@@ -27,8 +27,8 @@ export async function runCollectors(
   const touch = db.prepare("UPDATE offers SET last_seen_at = ? WHERE id = ?");
   const insertOffer = db.prepare<{ id: number }, SQLQueryBindings[]>(
     `INSERT INTO offers (source, source_id, url, title, company, location_text, city, workplace,
-       salary_min, salary_max, currency, published_at, description, dedup_key, first_seen_at, last_seen_at, raw_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+       salary_min, salary_max, currency, published_at, description, dedup_key, first_seen_at, last_seen_at, raw_json, partial)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
   );
   const insertLabel = db.prepare("INSERT OR IGNORE INTO offer_labels (offer_id, label, origin) VALUES (?, ?, 'rule')");
 
@@ -62,6 +62,7 @@ export async function runCollectors(
       at,
       at,
       offer.rawJson,
+      offer.partial ? 1 : 0,
     );
     for (const label of offer.labels) insertLabel.run(row!.id, label);
     return true;

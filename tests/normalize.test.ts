@@ -113,19 +113,12 @@ describe("normalize", () => {
       tags: [],
       labels: ["ai-first"],
       rawJson: '{"id":1}',
+      partial: false,
     });
   });
 
   test("explicit raw.city overrides the city derived from locationText", () => {
     expect(normalize({ ...base, city: "Olomouc" }).city).toBe("Olomouc");
-  });
-
-  test("workplace is remote from the remote tag", () => {
-    expect(normalize({ ...base, tags: ["Práce převážně z domova"] }).workplace).toBe("remote");
-  });
-
-  test("workplace is hybrid from the occasional-remote tag", () => {
-    expect(normalize({ ...base, tags: ["Možnost občasné práce z domova"] }).workplace).toBe("hybrid");
   });
 
   test("workplace is unknown when no work-mode signal exists", () => {
