@@ -103,6 +103,19 @@ describe("runCollectors", () => {
     expect(db.query("SELECT source_id FROM offers").all()).toEqual([{ source_id: "10" }]);
   });
 
+  test("offers without a company are not merged by dedup key", async () => {
+    const a = raw({ sourceId: "40", title: "Programátor", company: null, city: null });
+    const b = raw({ sourceId: "41", title: "Programátor", company: null, city: null });
+
+    const summaries = await runCollectors(db, [fake("fake", [a, b])], now);
+
+    expect(summaries[0]).toMatchObject({ status: "ok", fetched: 2, new: 2 });
+    expect(db.query("SELECT source_id FROM offers ORDER BY source_id").all()).toEqual([
+      { source_id: "40" },
+      { source_id: "41" },
+    ]);
+  });
+
   test("rule labels are stored with origin 'rule' and set workplace", async () => {
     const offer = raw({
       sourceId: "20",

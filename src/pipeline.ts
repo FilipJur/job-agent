@@ -39,7 +39,8 @@ export async function runCollectors(
       touch.run(at, same.id);
       return false;
     }
-    const repost = offer.title !== "" ? findByDedupKey.get(offer.dedupKey) : null;
+    // Company is required: without it the dedup key is title|city only and merges unrelated offers.
+    const repost = offer.title !== "" && offer.company?.trim() ? findByDedupKey.get(offer.dedupKey) : null;
     if (repost) {
       touch.run(at, repost.id);
       return false;
