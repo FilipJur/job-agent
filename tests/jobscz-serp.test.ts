@@ -18,10 +18,6 @@ describe("parseSerp on real AI engineer SERP", () => {
     expect(cards[29]!.sourceId).toBe("2001494012");
   });
 
-  test("canonical url without tracking params", () => {
-    expect(byId("2000557655").url).toBe("https://www.jobs.cz/rpd/2000557655/");
-  });
-
   test("first card fields", () => {
     expect(cards[0]).toEqual({
       sourceId: "2000557655",

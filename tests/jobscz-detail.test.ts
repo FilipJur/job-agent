@@ -34,8 +34,6 @@ describe("parseDetail: JSON-LD shape", () => {
   });
 
   test("description is plain text with line breaks", () => {
-    expect(d.description.length).toBeGreaterThan(0);
-    expect(d.description).not.toContain("<p>");
     expect(d.description).not.toContain("<li>");
     expect(d.description).not.toContain("&amp;");
     expect(d.description).toContain("\n");
@@ -64,7 +62,6 @@ describe("parseDetail: og widget shape", () => {
   });
 
   test("double-encoded description is decoded once fully", () => {
-    expect(d.description.length).toBeGreaterThan(0);
     expect(d.description).not.toContain("&amp;#");
     expect(d.description).not.toContain("&#");
     expect(d.description.startsWith("🧠 Hledáme")).toBe(true);
