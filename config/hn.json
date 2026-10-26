@@ -1,0 +1,6 @@
+{
+  "hn": {
+    "queries": ["REMOTE Europe", "REMOTE EU", "remote worldwide", "contract"],
+    "hitsPerPage": 100
+  }
+}

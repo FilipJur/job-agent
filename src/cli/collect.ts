@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import { createAshbyCollector } from "../collectors/ashby";
+import { createHnCollector } from "../collectors/hn";
 import { createJobsCzCollector } from "../collectors/jobscz";
 import { createHttpClient } from "../collectors/jobscz/http";
 import { createStartupJobsCollector } from "../collectors/startupjobs";
@@ -13,6 +14,7 @@ type Ctx = { fetchText: FetchText; limit: number | null; isKnown: (id: string) =
 export const COLLECTORS: Record<string, (ctx: Ctx) => Collector> = {
   ashby: ({ fetchText, limit }) =>
     createAshbyCollector({ fetchText, ...(limit === null ? {} : { maxOrgs: limit }) }),
+  hn: ({ fetchText, limit }) => createHnCollector({ fetchText, limit }),
   jobscz: ({ fetchText, limit, isKnown }) =>
     createJobsCzCollector({
       fetchText,
