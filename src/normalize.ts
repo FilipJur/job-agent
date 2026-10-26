@@ -61,6 +61,36 @@ export function deriveCity(locationText: string | null | undefined): string | nu
   return head;
 }
 
+/**
+ * Folded location -> canonical city: Czech names for English/German aliases, null for
+ * countries and regions (they say nothing about the city).
+ */
+const CANONICAL_CITY: Record<string, string | null> = {
+  praha: "Praha",
+  prague: "Praha",
+  prag: "Praha",
+  pilsen: "Plzeň",
+  czechia: null,
+  "czech republic": null,
+  cesko: null,
+  "ceska republika": null,
+  slovakia: null,
+  slovensko: null,
+  europe: null,
+  eu: null,
+  "european union": null,
+};
+/** Work modes and zones that sources put into location fields ("REMOTE (Europe)", "UTC+1"). */
+const NOT_A_PLACE = /remote|on-?site|hybrid|worldwide|time ?zones?|\b(gmt|utc)\b|multiple/i;
+
+/** Final city form: Czech alias names, and null for countries, regions, work modes and zones. */
+export function canonicalCity(city: string | null | undefined): string | null {
+  const text = city?.trim();
+  if (!text || NOT_A_PLACE.test(text)) return null;
+  const key = normalizeText(text).replace(/ \d+$/, ""); // "Praha 4" -> "praha"
+  return Object.hasOwn(CANONICAL_CITY, key) ? (CANONICAL_CITY[key] ?? null) : text;
+}
+
 function workplaceFrom(labels: string[]): Workplace {
   if (labels.includes("remote")) return "remote";
   if (labels.includes("hybrid")) return "hybrid";
@@ -69,7 +99,7 @@ function workplaceFrom(labels: string[]): Workplace {
 }
 
 export function normalize(raw: RawOffer): Offer {
-  const city = raw.city?.trim() || deriveCity(raw.locationText);
+  const city = canonicalCity(raw.city) ?? canonicalCity(deriveCity(raw.locationText));
   const labels = applyRules({
     title: raw.title,
     description: raw.description,

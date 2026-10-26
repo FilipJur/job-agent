@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { deriveCity, dedupKey, normalize, normalizeUrl } from "../src/normalize";
+import { canonicalCity, deriveCity, dedupKey, normalize, normalizeUrl } from "../src/normalize";
 import type { RawOffer } from "../src/types";
 
 describe("normalizeUrl", () => {
@@ -62,6 +62,30 @@ describe("deriveCity", () => {
   });
 });
 
+describe("canonicalCity", () => {
+  test.each([
+    ["Prague", "Praha"],
+    ["Praha 4", "Praha"],
+    ["Pilsen", "Plzeň"],
+    ["Brno", "Brno"],
+    ["Opatovice nad Labem", "Opatovice nad Labem"],
+    ["Berlin", "Berlin"],
+    ["Czechia", null],
+    ["Česko", null],
+    ["Czech Republic", null],
+    ["Europe", null],
+    ["Remote", null],
+    ["REMOTE (Europe)", null],
+    ["NYC or REMOTE (US", null],
+    ["REMOTE (European time zones) or ONSITE", null],
+    ["REMOTE [Europe / (GMT+2)]", null],
+    ["Remote (UTC-3 to UTC+3)", null],
+    ["Multiple roles", null],
+  ])("%p -> %p", (input, city) => {
+    expect(canonicalCity(input)).toBe(city);
+  });
+});
+
 describe("normalize", () => {
   const base: RawOffer = {
     source: "jobscz",
@@ -114,6 +138,12 @@ describe("normalize", () => {
 
   test("labels come from rules over tags (contract type)", () => {
     expect(normalize({ ...base, tags: ["pracovní smlouva"] }).labels).toEqual(["hpp", "ai-first"]);
+  });
+
+  test("a country in raw.city falls back to the city in locationText and gets the praha label", () => {
+    const offer = normalize({ ...base, city: "Czechia", locationText: "Prague, Czechia" });
+    expect(offer.city).toBe("Praha");
+    expect(offer.labels).toContain("praha");
   });
 
   test("missing company and location produce null fields and a null city", () => {

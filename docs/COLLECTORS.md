@@ -25,6 +25,7 @@ interface Options {
 - `description`: plain text (strip HTML). `partial: true` when the text is clearly truncated or missing.
 - `publishedAt`: ISO string when the source has it.
 - `city`: only when the source states it explicitly; otherwise `locationText` and let normalization derive it.
+  Pass the raw location; normalization canonicalises the city.
 - `tags`: short facts that rule labels read. Map structured fields to these canonical tags so existing rules fire:
   - work mode: `fully remote` | `hybrid work` | `on-site`
   - contract: `contractor` (contract/freelance/B2B), nothing for plain full-time
