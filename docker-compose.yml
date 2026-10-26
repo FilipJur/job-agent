@@ -1,0 +1,18 @@
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    env_file: .env
+    environment:
+      HOST: "0.0.0.0"
+    restart: unless-stopped
+
+  daily:
+    build: .
+    volumes:
+      - ./data:/app/data
+    env_file: .env
+    command: ["bun", "run", "daily"]
