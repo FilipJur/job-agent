@@ -184,6 +184,6 @@ if (import.meta.main) {
     throw new Error(`PORT must be an integer between 1 and 65535, got ${process.env.PORT}`);
   }
   const db = openDb(dbPath);
-  const server = Bun.serve({ port, hostname: "127.0.0.1", fetch: (req) => handle(req, db) });
+  const server = Bun.serve({ port, hostname: process.env.HOST ?? "127.0.0.1", fetch: (req) => handle(req, db) });
   console.log(`job-agent web on http://${server.hostname}:${server.port} (db: ${dbPath})`);
 }
