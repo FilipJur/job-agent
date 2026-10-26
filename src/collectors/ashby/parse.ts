@@ -49,8 +49,8 @@ interface AshbyBoard {
 
 /** Czech place names as Ashby writes them in location strings and addresses. */
 const CZECH = /\b(czechia|czech|prague|praha|brno|olomouc|ostrava|plzen|pilsen|liberec|zlin|budejovice|cz)\b/;
-/** Text that makes a remote job reachable from Czechia: "Remote (UTC+1)", "Europe", "EU", "Worldwide". */
-const EUROPE = /\b(europe|european|eu|emea|worldwide|anywhere|global|remote)\b/;
+/** Text that makes a remote job reachable from Czechia: "Europe", "EU", "Worldwide". */
+const EUROPE = /\b(europe|european|eu|emea|worldwide|anywhere|global)\b/;
 
 const MODE_TAGS: Record<string, string> = {
   remote: "fully remote",
@@ -73,7 +73,9 @@ export function isRelevant(job: AshbyJob): boolean {
   const texts = placeTexts(job);
   if (texts.some((text) => CZECH.test(text))) return true;
   const remote = job.isRemote === true || /remote/i.test(job.workplaceType ?? "");
-  return remote && (texts.length === 0 || texts.some((text) => EUROPE.test(text)));
+  // A bare "remote" place text names no region: unspecified, like an empty location.
+  const specified = texts.filter((text) => text.trim() !== "remote");
+  return remote && (specified.length === 0 || specified.some((text) => EUROPE.test(text)));
 }
 
 function workMode(job: AshbyJob): string | null {
