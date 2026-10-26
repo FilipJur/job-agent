@@ -80,6 +80,15 @@ describe("parseDetail: JSON-LD", () => {
     expect(result.detail.tags).toContain("contractor");
   });
 
+  test("max-only range keeps the missing minimum as null", () => {
+    const body = `<html><head><script type="application/ld+json">${JSON.stringify({ "@type": "JobPosting", title: "T", baseSalary: { currency: "CZK", value: { minValue: 0, maxValue: 130000, unitText: "MONTH" } } })}</script></head><body></body></html>`;
+    const result = parseDetail(body);
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.detail.salaryMin).toBeNull();
+    expect(result.detail.salaryMax).toBe(130000);
+  });
+
   test("closed offer is recognised as expired", () => {
     expect(parseDetail(expired)).toEqual({ kind: "expired" });
   });

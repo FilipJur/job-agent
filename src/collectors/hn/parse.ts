@@ -55,11 +55,11 @@ export function parseHeader(line: string): Header {
   const segments = header.split("|").map((s) => s.trim()).filter((s) => s !== "");
   const remoteSegment = segments.find((s) => /\bREMOTE\b|\bONSITE\b/i.test(s)) ?? null;
   // Stripping tags leaves an anchor's text as a bare URL and some headers put the location second;
-  // the first remaining segment is the role, else the whole header is the best title there is.
-  const role =
-    segments
-      .slice(1)
-      .find((s) => !/^<?https?:\/\//.test(s) && !WORK_MODE.test(s) && !EMPLOYMENT.test(s)) ?? null;
+  // the first remaining segment is the role, the second is the location fallback.
+  const rest = segments
+    .slice(1)
+    .filter((s) => !/^<?https?:\/\//.test(s) && !WORK_MODE.test(s) && !EMPLOYMENT.test(s));
+  const role = rest[0] ?? null;
   const company = (segments[0] ?? "").replace(/\s*\(https?:\/\/[^)]*\)/g, "").trim();
 
   const tags = [...segments];
@@ -69,7 +69,7 @@ export function parseHeader(line: string): Header {
   return {
     company: company === "" ? null : company,
     title: role ?? header,
-    locationText: remoteSegment ?? segments[2] ?? null,
+    locationText: remoteSegment ?? rest[1] ?? null,
     tags: [...new Set(tags)],
   };
 }

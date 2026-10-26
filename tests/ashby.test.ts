@@ -45,20 +45,20 @@ describe("ashby board parsing", () => {
   });
 
   test("reads salary from summary components and keeps no city for fully remote jobs", () => {
-    const offers = parseBoard(checkly, "Checkly");
-    expect(offers.length).toBe(2);
-    const senior = offers.find((o) => o.title.startsWith("Senior Product Engineer"));
+    const body = JSON.stringify({ jobs: [{ id: "s1", title: "Senior Product Engineer", jobUrl: "https://example.com/s1", isRemote: true, location: "Remote (Europe)", compensation: { summaryComponents: [{ compensationType: "Salary", currencyCode: "EUR", minValue: 79000, maxValue: 105000 }] } }] });
+    const [senior] = parseBoard(body, "Checkly");
     expect(senior?.tags[0]).toBe("fully remote");
-    expect(senior?.locationText).toBe("Remote (UTC-3 to UTC+3)");
+    expect(senior?.locationText).toBe("Remote (Europe)");
     expect(senior?.city).toBeNull();
     expect([senior?.salaryMin, senior?.salaryMax, senior?.currency]).toEqual([79000, 105000, "EUR"]);
-    expect(offers.find((o) => o.title.startsWith("Don't see"))?.locationText).toBe("Remote");
   });
 
   test("judges relevance: unspecified or Europe location keeps a remote job, a foreign office does not", () => {
     const job = (patch: Partial<AshbyJob>) => ({ id: "x", title: "T", jobUrl: "u", ...patch });
     expect(isRelevant(job({ isRemote: true }))).toBe(true);
     expect(isRelevant(job({ isRemote: true, location: "Europe" }))).toBe(true);
+    expect(isRelevant(job({ isRemote: true, location: "Remote" }))).toBe(true);
+    expect(isRelevant(job({ isRemote: true, location: "Remote - United States" }))).toBe(false);
     expect(isRelevant(job({ workplaceType: "OnSite", location: "Berlin, Germany" }))).toBe(false);
   });
 });
@@ -100,7 +100,7 @@ describe("ashby collector", () => {
       "https://api.ashbyhq.com/posting-api/job-board/ghost?includeCompensation=true",
       "https://api.ashbyhq.com/posting-api/job-board/checkly?includeCompensation=true",
     ]);
-    expect(offers.length).toBe(5);
+    expect(offers.length).toBe(3);
   });
 
   test("caps the org requests with maxOrgs", async () => {
@@ -112,9 +112,14 @@ describe("ashby collector", () => {
     expect(offers.every((o) => o.company === "Apify")).toBe(true);
   });
 
-  test("throws only when every board fails", async () => {
-    const site = stubbed(() => ({ status: 500 }));
-    const collector = createAshbyCollector({ fetchText: site.fetchText, orgs: ORGS });
-    await expect(collectQuietly(collector)).rejects.toThrow("all 3 Ashby org boards failed");
+  test("throws when no board loads, including 404 skips mixed with failures", async () => {
+    const fail = stubbed(() => ({ status: 500 }));
+    await expect(
+      collectQuietly(createAshbyCollector({ fetchText: fail.fetchText, orgs: ORGS })),
+    ).rejects.toThrow("no Ashby org board loaded of 3");
+    const mixed = stubbed((org) => (org === "ghost" ? { status: 404 } : { status: 500 }));
+    await expect(
+      collectQuietly(createAshbyCollector({ fetchText: mixed.fetchText, orgs: ORGS })),
+    ).rejects.toThrow("no Ashby org board loaded of 3");
   });
 });
