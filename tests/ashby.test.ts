@@ -112,9 +112,14 @@ describe("ashby collector", () => {
     expect(offers.every((o) => o.company === "Apify")).toBe(true);
   });
 
-  test("throws only when every board fails", async () => {
-    const site = stubbed(() => ({ status: 500 }));
-    const collector = createAshbyCollector({ fetchText: site.fetchText, orgs: ORGS });
-    await expect(collectQuietly(collector)).rejects.toThrow("all 3 Ashby org boards failed");
+  test("throws when no board loads, including 404 skips mixed with failures", async () => {
+    const fail = stubbed(() => ({ status: 500 }));
+    await expect(
+      collectQuietly(createAshbyCollector({ fetchText: fail.fetchText, orgs: ORGS })),
+    ).rejects.toThrow("no Ashby org board loaded of 3");
+    const mixed = stubbed((org) => (org === "ghost" ? { status: 404 } : { status: 500 }));
+    await expect(
+      collectQuietly(createAshbyCollector({ fetchText: mixed.fetchText, orgs: ORGS })),
+    ).rejects.toThrow("no Ashby org board loaded of 3");
   });
 });

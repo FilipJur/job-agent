@@ -20,6 +20,7 @@ export function createAshbyCollector(opts: AshbyOptions): Collector {
     async collect() {
       const offers: RawOffer[] = [];
       const errors: string[] = [];
+      let loaded = 0;
       for (const org of orgs) {
         const url = `${BOARD}/${encodeURIComponent(org.id)}?includeCompensation=true`;
         try {
@@ -31,12 +32,13 @@ export function createAshbyCollector(opts: AshbyOptions): Collector {
           }
           if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
           offers.push(...parseBoard(res.body, org.name, org.departments));
+          loaded++;
         } catch (e) {
           errors.push(`${org.id}: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
-      if (errors.length > 0 && errors.length === orgs.length) {
-        throw new Error(`all ${orgs.length} Ashby org boards failed; first: ${errors[0] ?? ""}`);
+      if (orgs.length > 0 && loaded === 0) {
+        throw new Error(`no Ashby org board loaded of ${orgs.length}; first: ${errors[0] ?? "all skipped (HTTP 404)"}`);
       }
       return offers;
     },
