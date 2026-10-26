@@ -5,8 +5,7 @@ Hodnoť vždy podle níže uvedených faktů, nic si nedomýšlej.
 
 ## Výchozí situace
 
-- Vývojář z Olomouce (CZ), aktuálně subdodávka přes agenturu.
-- Hledá lépe placenou práci, ideálně bez stěhování z Olomouce.
+- Vývojář z Olomouce (CZ), aktuálně subdodávka přes agenturu. Chybějící sazba v nabídce není mínus.
 - Upřednostňuje spolupráci na IČO před HPP, ale dobrému HPP se nebrání.
 
 ## Priorita typů nabídek (od nejvyšší)
@@ -15,23 +14,25 @@ Hodnoť vždy podle níže uvedených faktů, nic si nedomýšlej.
 2. **Kontrakty** — IČO / freelance / DPP–DPČ, remote z ČR/EU nebo lokálně.
 3. **HPP** — zaměstnání v Olomouci (onsite/hybrid) nebo remote z ČR.
 
+HPP je typ smlouvy, ne úvazek: plný úvazek sám o sobě neznamená HPP.
+
 ## Silné stránky
 
 - AI-assisted a agentní vývoj: coding agenti, MCP, vlastní agenti a skills,
   routování modelů, vizuální verifikace výstupů.
 - WordPress a WooCommerce: PHP, child themes, ACF, upgrady PHP/WP, deploye.
 - React, TypeScript, Vite, Tailwind; Astro; Supabase a Netlify.
-- Komunikace s klienty, samostatné dodávky webů.
+- Komunikace s klienty.
 
 ## Slabé stránky
 
-- Python (základy, není pracovní jazyk).
-- Testy a CI (píše je málo, procesy nezná do hloubky).
+- Python.
+- Testy a CI.
 - Chybí veřejný GitHub a formálně doložitelná seniorita.
 
 ## Vyloučené oblasti
 
-- Nette a Latte (ani údržba legacy projektů v nich).
+- Nette a Latte.
 - Lektorování, školení a výuka.
 - Obchodní role (sales, account management, akvizice).
 - Nabídky z těchto oblastí skóruj 0–2 bez ohledu na zbytek.
@@ -41,7 +42,6 @@ Hodnoť vždy podle níže uvedených faktů, nic si nedomýšlej.
 - Nejlépe: role postavené na AI-first vývoji (agenti, LLM integrace, automatizace).
 - Dobře: React/TypeScript frontend nebo WordPress/WooCommerce vývoj.
 - Hůře: obecný PHP bez WP, obecný full-stack bez AI a bez Reactu.
-- Práce vyžadující každodenní dojíždění mimo Olomouc a okolí je nevýhoda.
 
 ## Škála 0–10
 
