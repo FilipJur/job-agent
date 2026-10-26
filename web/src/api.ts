@@ -58,3 +58,20 @@ export async function patchAgency(agencyId: number, patch: AgencyPatch): Promise
     body: JSON.stringify(patch),
   });
 }
+
+export interface ProfileStatus {
+  text: string;
+  pending: number;
+}
+
+export async function fetchProfile(signal: AbortSignal): Promise<ProfileStatus> {
+  return request<ProfileStatus>("/api/profile", { signal });
+}
+
+export async function saveProfile(text: string): Promise<ProfileStatus> {
+  return request<ProfileStatus>("/api/profile", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+}
