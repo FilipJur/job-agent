@@ -6,21 +6,28 @@ import { createCachedFetch, type HttpMode } from "../http-cache";
 import { runCollectors } from "../pipeline";
 import type { Collector, FetchText } from "../types";
 
-/** `--source` name -> collector factory. Collectors stay DB-free; the CLI injects the known-offer lookup. */
 export const COLLECTORS: Record<string, (ctx: { fetchText: FetchText; limit: number | null; isKnown: (id: string) => boolean }) => Collector> = {
   jobscz: ({ fetchText, limit, isKnown }) =>
     createJobsCzCollector({ fetchText, isKnown, ...(limit === null ? {} : { maxPagesPerKeyword: 1, maxDetails: limit }) }),
 };
 
-/** Keys of the known-offer set: a source id is only unique within its source. */
 const keyOf = (source: string, sourceId: string): string => `${source}\0${sourceId}`;
+
+/** Stored detail failure worth refetching; og successes (`detailError: null`) and corrupt rows stay known. */
+const retryable = (rawJson: string): boolean => {
+  try {
+    const p: unknown = JSON.parse(rawJson);
+    return typeof p === "object" && p !== null && "detailError" in p && typeof p.detailError === "string" && p.detailError.length > 0;
+  } catch {
+    return false;
+  }
+};
 
 async function main(argv: string[]): Promise<void> {
   let sources: string[];
   let limit: number | null;
   let mode: HttpMode;
   try {
-    // `strict: false` + positionals: unknown flags (`--help`) and stray words stay ignored on purpose.
     const { values } = parseArgs({ args: argv, options: { source: { type: "string", multiple: true }, limit: { type: "string" } }, strict: false, allowPositionals: true });
     const rawLimit = values.limit as string | undefined;
     if (rawLimit !== undefined && (!/^\d+$/.test(rawLimit) || Number(rawLimit) < 1)) throw new Error(`--limit expects a positive integer, got "${rawLimit}"`);
@@ -30,37 +37,34 @@ async function main(argv: string[]): Promise<void> {
     if (mode !== "live" && mode !== "record" && mode !== "replay") throw new Error(`invalid HTTP_MODE "${mode}"; expected live, record or replay`);
   } catch (e) {
     console.error(e instanceof Error ? e.message : String(e));
-    process.exitCode = 1;
-    return;
+    process.exitCode = 1; return;
   }
 
   const names = sources.length > 0 ? [...new Set(sources)] : Object.keys(COLLECTORS);
   const unknown = names.filter((name) => !Object.hasOwn(COLLECTORS, name));
   if (unknown.length > 0) {
     console.error(`unknown source: ${unknown.join(", ")} (known: ${Object.keys(COLLECTORS).join(", ")})`);
-    process.exitCode = 1;
-    return;
+    process.exitCode = 1; return;
   }
 
   const fetchText = createCachedFetch(createHttpClient().fetchText, { mode, dir: process.env.HTTP_CACHE_DIR || "data/http-cache" });
   const db = openDb(process.env.DB_PATH || "data/jobs.db");
   try {
-    const rows = db.query<{ source: string; source_id: string }, []>("SELECT source, source_id FROM offers").all();
-    const known = new Set(rows.map((row) => keyOf(row.source, row.source_id)));
+    const rows = db.query<{ source: string; source_id: string; raw_json: string }, []>("SELECT source, source_id, raw_json FROM offers").all();
+    const known = new Set(rows.filter((r) => !retryable(r.raw_json)).map((r) => keyOf(r.source, r.source_id)));
     const collectors = names.map((name) => COLLECTORS[name]!({ fetchText, limit, isKnown: (id) => known.has(keyOf(name, id)) }));
 
     const runs = await runCollectors(db, collectors);
     for (const r of runs) {
-      const line = `${r.source}: ${r.status === "ok" ? "ok" : "ERROR"} fetched=${r.fetched} new=${r.new} partial=${r.partial} detail_errors=${r.detailErrors} errors=${r.status === "error" ? 1 : 0}`;
+      const line = `${r.source}: ${r.status === "ok" ? "ok" : "ERROR"} fetched=${r.fetched} new=${r.new} updated=${r.updated} partial=${r.partial} detail_errors=${r.detailErrors} errors=${r.status === "error" ? 1 : 0}`;
       console.log(r.status === "ok" ? line : `${line} — ${r.error}`);
     }
-    const total = (key: "fetched" | "new" | "partial" | "detailErrors") => runs.reduce((acc, r) => acc + r[key], 0);
+    const total = (key: "fetched" | "new" | "updated" | "partial" | "detailErrors") => runs.reduce((acc, r) => acc + r[key], 0);
     const errors = runs.filter((r) => r.status === "error").length;
-    console.log(`total: fetched=${total("fetched")} new=${total("new")} partial=${total("partial")} detail_errors=${total("detailErrors")} errors=${errors}`);
+    console.log(`total: fetched=${total("fetched")} new=${total("new")} updated=${total("updated")} partial=${total("partial")} detail_errors=${total("detailErrors")} errors=${errors}`);
     if (errors > 0) process.exitCode = 1;
   } finally {
     db.close();
   }
 }
-
 if (import.meta.main) await main(process.argv.slice(2));

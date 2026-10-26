@@ -55,8 +55,8 @@ describe("runCollectors", () => {
     const summaries = await runCollectors(db, [bad, good], now);
 
     expect(summaries).toEqual([
-      { source: "bad", status: "error", fetched: 0, new: 0, partial: 0, detailErrors: 0, error: "boom" },
-      { source: "good", status: "ok", fetched: 2, new: 2, partial: 0, detailErrors: 0, error: null },
+      { source: "bad", status: "error", fetched: 0, new: 0, updated: 0, partial: 0, detailErrors: 0, error: "boom" },
+      { source: "good", status: "ok", fetched: 2, new: 2, updated: 0, partial: 0, detailErrors: 0, error: null },
     ]);
     const runs = db.query("SELECT source, status, error, fetched, new, finished_at FROM runs ORDER BY id").all();
     expect(runs).toEqual([
@@ -83,6 +83,32 @@ describe("runCollectors", () => {
         url: "https://www.jobs.cz/rpd/1/",
       },
     ]);
+  });
+
+  test("a previously failed detail is retried and the stored row is updated in place", async () => {
+    const failed = raw({ sourceId: "retry-1", partial: true, description: "", city: null, raw: { detailError: "boom" } });
+    await runCollectors(db, [fake("fake", [failed])], now);
+
+    clock = new Date("2026-10-27T09:30:00Z");
+    const full = raw({ sourceId: "retry-1", description: "Plný popis", city: "Brno", raw: { id: 1 } });
+    const summaries = await runCollectors(db, [fake("fake", [full])], now);
+
+    expect(summaries[0]).toMatchObject({ status: "ok", fetched: 1, new: 0, updated: 1 });
+    const rows = db
+      .query<
+        { description: string; city: string | null; partial: number; first_seen_at: string; last_seen_at: string; raw_json: string },
+        []
+      >("SELECT description, city, partial, first_seen_at, last_seen_at, raw_json FROM offers")
+      .all();
+    expect(rows.length).toBe(1);
+    expect(rows[0]).toMatchObject({
+      description: "Plný popis",
+      city: "Brno",
+      partial: 0,
+      first_seen_at: "2026-10-26T08:00:00.000Z",
+      last_seen_at: "2026-10-27T09:30:00.000Z",
+    });
+    expect(JSON.parse(rows[0]!.raw_json)).toEqual({ id: 1 });
   });
 
   test("the same source_id twice within one batch is stored once", async () => {

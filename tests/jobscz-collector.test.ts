@@ -119,6 +119,18 @@ describe("jobs.cz collector", () => {
     expect(offer?.company).toBe(known?.company ?? null);
   });
 
+  test("a previously failed offer is not treated as known and its detail is fetched", async () => {
+    const site = jobsCz();
+    await createJobsCzCollector({
+      keywords: ["AI engineer"],
+      fetchText: site.fetchText,
+      now: () => NOW,
+      isKnown: () => false,
+    }).collect();
+
+    expect(site.calls.some((u) => u.includes(`/rpd/${throwId}/`))).toBe(true);
+  });
+
   test("throws when all SERP requests fail (first error summarised)", async () => {
     const site = jobsCz(() => {
       throw new Error("network down");
