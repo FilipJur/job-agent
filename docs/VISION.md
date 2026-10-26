@@ -52,11 +52,12 @@ Measured on 2026-10-26 (relevant hits per query):
 | jobs.cz (national, AI/React/TS keywords) | main CZ source, ~10–15 relevant per query |
 | startupjobs.cz (sitemap + JSON-LD detail) | highest AI-first density |
 | Workable API (`location=Czechia`, precise queries) | structured, remote filter |
-| Upwork search | most freelance volume, rate data |
 | Ashby per company (e.g. apify) | tracked companies only |
 | HN "Who is hiring" via Algolia | monthly, best remote-EU AI roles |
 
-Dropped: prace.cz (duplicates jobs.cz), Working Nomads (unfilterable), WWR (mostly US-only), Wellfound (0 for CZ, not machine-readable), Webtrh poptávky (mostly public tenders), junior.guru (junior-only).
+Dropped: Upwork (robots.txt disallows `/nx/` search and `/jobs/rss`), prace.cz (duplicates jobs.cz), Working Nomads (unfilterable), WWR (mostly US-only), Wellfound (0 for CZ, not machine-readable), Webtrh poptávky (mostly public tenders), junior.guru (junior-only).
+
+How to add a source: `docs/COLLECTORS.md`.
 
 Agencies: discovered once via firmy.cz "Webdesign" (okres Olomouc) + web search; 21 seeded.
 
@@ -64,10 +65,11 @@ Agencies: discovered once via firmy.cz "Webdesign" (okres Olomouc) + web search;
 Old MacBook (M1, 8 GB) at home, OrbStack + docker compose: one container for the daily collect/score job, one for the web. Access via LAN or Tailscale; no public exposure, no auth. Secrets only in `.env`.
 
 ## Roadmap
-- **v0**: (1) scaffold + jobs.cz + rule labels ✅ · (1.5) dev mode: HTTP record/replay cache, skip known details, `--source`/`--limit` ✅ · (1.6) cleanup: trim CLI, retry failed details · (2) remaining sources · (3) LLM scoring + `profile.md` · (4) web UI + agencies seed · (5) docker compose + daily schedule.
+- **v0**: (1) scaffold + jobs.cz + rule labels ✅ · (1.5) dev mode: HTTP record/replay cache, skip known details, `--source`/`--limit` ✅ · (1.6) cleanup: trim CLI, retry failed details ✅ · (2) startupjobs, Workable, Ashby, HN collectors (parallel) · (3) LLM scoring + `profile.md` · (4) web UI + agencies seed · (5) docker compose + daily schedule.
 - **Later**: Jev typed judge to validate scoring against his labels; Framer Motion polish; morning notification; rate statistics from budgets/salaries; draft replies from verified `facts.md` only.
 
 ## Decisions log
+- Sources whose robots.txt disallows the needed paths are dropped, not worked around (Upwork).
 - Research-only agent; human sends everything (auto-apply risks blacklisting and fabricated claims).
 - Agencies before HPP: subcontracting is his current model and fastest path to better rates.
 - Deterministic collectors + rules before LLM: cheaper, testable, debuggable.

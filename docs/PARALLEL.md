@@ -31,5 +31,5 @@ The main worktree (`/Users/filip/projects/job-agent`, branch `main`) belongs to 
 4. Push `main` only after the user approves.
 
 ## When to parallelise
-- Good: independent collectors (one directory each), UI vs. collector work, docs vs. code.
+- Good: independent collectors (one directory each), UI vs. collector work, docs vs. code. Exception to disjoint files: each collector adds one `COLLECTORS` entry in `src/cli/collect.ts`; the lead resolves those conflicts at merge (`docs/COLLECTORS.md`).
 - Bad: review fixes, schema changes, anything touching `src/db.ts`, `src/types.ts` or `src/pipeline.ts` — do these in one worker.
