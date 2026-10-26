@@ -127,6 +127,19 @@ describe("runCollectors", () => {
     expect(db.query("SELECT workplace FROM offers WHERE source_id = '20'").get()).toEqual({ workplace: "remote" });
   });
 
+  test("stores the partial flag", async () => {
+    const partial = raw({ sourceId: "40", title: "Partial AI", partial: true });
+    const full = raw({ sourceId: "41", title: "Full AI" });
+
+    await runCollectors(db, [fake("fake", [partial, full])], now);
+
+    const rows = db.query("SELECT source_id, partial FROM offers ORDER BY source_id").all();
+    expect(rows).toEqual([
+      { source_id: "40", partial: 1 },
+      { source_id: "41", partial: 0 },
+    ]);
+  });
+
   test("a store failure rolls back the whole collector batch and records the error", async () => {
     const valid = raw({ sourceId: "30", title: "Valid" });
     const broken = raw({ sourceId: null as unknown as string, title: "Broken" });

@@ -94,5 +94,6 @@ export function normalize(raw: RawOffer): Offer {
     tags: raw.tags,
     labels,
     rawJson: JSON.stringify(raw.raw),
+    partial: raw.partial,
   };
 }

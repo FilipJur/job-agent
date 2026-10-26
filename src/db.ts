@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS offers (
   first_seen_at TEXT NOT NULL,
   last_seen_at  TEXT NOT NULL,
   raw_json      TEXT NOT NULL,
+  partial       INTEGER NOT NULL DEFAULT 0,
   UNIQUE (source, source_id)
 );
 CREATE INDEX IF NOT EXISTS idx_offers_dedup_key ON offers (dedup_key);
@@ -51,5 +52,9 @@ export function openDb(path: string): Database {
   db.run("PRAGMA journal_mode = WAL");
   db.run("PRAGMA foreign_keys = ON");
   db.run(SCHEMA);
+  const offerColumns = db.query("PRAGMA table_info(offers)").all() as { name: string }[];
+  if (!offerColumns.some((c) => c.name === "partial")) {
+    db.run("ALTER TABLE offers ADD COLUMN partial INTEGER NOT NULL DEFAULT 0");
+  }
   return db;
 }

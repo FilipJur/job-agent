@@ -113,6 +113,7 @@ describe("normalize", () => {
       tags: [],
       labels: ["ai-first"],
       rawJson: '{"id":1}',
+      partial: false,
     });
   });
 
