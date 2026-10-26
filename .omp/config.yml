@@ -1,0 +1,24 @@
+# Model policy for every omp session started in this repo or its worktrees (lead, reviewer, workers).
+# Session model: Muse Spark 1.3 Contributor, fallback Claude Sonnet 5.5.
+# Subagent model: DeepSeek V4.1 Flash (OpenCode Go), fallback Claude Haiku 5.5.
+modelRoles:
+  default: opencode-go/muse-spark-1.3-contributor
+  task: opencode-go/deepseek-v4.1-flash
+  smol: opencode-go/deepseek-v4.1-flash
+retry:
+  modelFallback: true
+  fallbackChains:
+    default:
+      - anthropic/claude-sonnet-5-5
+    task:
+      - anthropic/claude-haiku-5-5
+    smol:
+      - anthropic/claude-haiku-5-5
+task:
+  agentModelOverrides:
+    task: "@task"
+    scout: "@task"
+    sonic: "@task"
+    reviewer: "@task"
+    librarian: "@task"
+    designer: "@task"
