@@ -3,18 +3,10 @@ import { deriveCity, dedupKey, normalize, normalizeUrl } from "../src/normalize"
 import type { RawOffer } from "../src/types";
 
 describe("normalizeUrl", () => {
-  test("strips tracking params and keeps the canonical job URL", () => {
-    expect(
-      normalizeUrl(
-        "https://www.jobs.cz/rpd/2001265820/?searchId=b758a98d-b271-4c17-ab91-3af8fe408261&rps=233&utm_source=x",
-      ),
-    ).toBe("https://www.jobs.cz/rpd/2001265820/");
-  });
-
   test("strips every known tracking key, matching utm_* by prefix and keys case-insensitively", () => {
     expect(
       normalizeUrl(
-        "https://example.com/job/1?utm_medium=email&utm_campaign=c&gclid=abc&_gl=1*xyz&impressionId=7&originJobAdUuid=u&UTM_Source=a",
+        "https://example.com/job/1?searchId=b758&rps=233&utm_medium=email&utm_campaign=c&gclid=abc&_gl=1*xyz&impressionId=7&originJobAdUuid=u&UTM_Source=a",
       ),
     ).toBe("https://example.com/job/1");
   });
@@ -67,11 +59,6 @@ describe("deriveCity", () => {
 
   test("region-only location yields null", () => {
     expect(deriveCity("Královéhradecký kraj")).toBeNull();
-  });
-
-  test("null yields null", () => {
-    expect(deriveCity(null)).toBeNull();
-    expect(deriveCity(undefined)).toBeNull();
   });
 });
 

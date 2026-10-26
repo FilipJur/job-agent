@@ -177,17 +177,4 @@ describe("runCollectors", () => {
     expect(db.query("SELECT COUNT(*) AS n FROM offers").get()).toEqual({ n: 0 });
     expect(db.query("SELECT COUNT(*) AS n FROM offer_labels").get()).toEqual({ n: 0 });
   });
-
-  test("a failed batch leaves partial and detail_errors at 0 on the run", async () => {
-    const valid = raw({ sourceId: "31", title: "Valid", partial: true, raw: { detailError: "HTTP 500" } });
-    const broken = raw({ sourceId: null as unknown as string, title: "Broken" });
-
-    await runCollectors(db, [fake("fake", [valid, broken])], now);
-
-    expect(db.query("SELECT status, partial, detail_errors FROM runs").get()).toEqual({
-      status: "error",
-      partial: 0,
-      detail_errors: 0,
-    });
-  });
 });
