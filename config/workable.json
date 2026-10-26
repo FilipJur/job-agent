@@ -1,0 +1,6 @@
+{
+  "queries": ["AI engineer", "LLM", "TypeScript", "React", "frontend"],
+  "location": "Czechia",
+  "maxPagesPerQuery": 3,
+  "excludeCompanies": ["Mindrift"]
+}

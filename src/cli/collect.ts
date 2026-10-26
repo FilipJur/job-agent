@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
 import { createJobsCzCollector } from "../collectors/jobscz";
 import { createHttpClient } from "../collectors/jobscz/http";
+import { createWorkableCollector } from "../collectors/workable";
 import { openDb } from "../db";
 import { createCachedFetch, type HttpMode } from "../http-cache";
 import { runCollectors, storedDetailError } from "../pipeline";
@@ -14,6 +15,7 @@ export const COLLECTORS: Record<string, (ctx: Ctx) => Collector> = {
       isKnown,
       ...(limit === null ? {} : { maxPagesPerKeyword: 1, maxDetails: limit }),
     }),
+  workable: ({ fetchText, limit }) => createWorkableCollector({ fetchText, limit }),
 };
 
 const keyOf = (source: string, id: string): string => `${source}\0${id}`;
