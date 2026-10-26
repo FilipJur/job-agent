@@ -6,6 +6,8 @@ export const SOURCE = "ashby";
 export interface AshbyOrg {
   id: string;
   name: string;
+  /** Keep only jobs in these departments (exact match); all jobs when absent. */
+  departments?: string[];
 }
 
 interface AshbyPostalAddress {
@@ -29,6 +31,7 @@ interface AshbyCompensationComponent {
 export interface AshbyJob extends AshbyLocation {
   id: string;
   title: string;
+  department?: string | null;
   jobUrl: string;
   publishedAt?: string | null;
   employmentType?: string | null;
@@ -120,9 +123,10 @@ function toRawOffer(job: AshbyJob, company: string): RawOffer {
   };
 }
 
-export function parseBoard(body: string, company: string): RawOffer[] {
+export function parseBoard(body: string, company: string, departments?: string[]): RawOffer[] {
   const board = JSON.parse(body) as AshbyBoard;
   return (board.jobs ?? [])
     .filter((job) => job.id.length > 0 && isRelevant(job))
+    .filter((job) => !departments || departments.includes(job.department ?? ""))
     .map((job) => toRawOffer(job, company));
 }

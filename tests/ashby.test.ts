@@ -39,6 +39,11 @@ describe("ashby board parsing", () => {
     expect(offers.map((o) => o.city)).toEqual(["Prague", "Opatovice nad Labem"]);
   });
 
+  test("keeps only allowlisted departments", () => {
+    const offers = parseBoard(rohlik, "Rohlík", ["IT", "Product Management"]);
+    expect(offers.map((o) => o.title)).toEqual(["Senior Product Engineer"]);
+  });
+
   test("reads salary from summary components and keeps no city for fully remote jobs", () => {
     const offers = parseBoard(checkly, "Checkly");
     expect(offers.length).toBe(2);

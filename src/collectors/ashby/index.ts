@@ -30,7 +30,7 @@ export function createAshbyCollector(opts: AshbyOptions): Collector {
             continue;
           }
           if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
-          offers.push(...parseBoard(res.body, org.name));
+          offers.push(...parseBoard(res.body, org.name, org.departments));
         } catch (e) {
           errors.push(`${org.id}: ${e instanceof Error ? e.message : String(e)}`);
         }
