@@ -80,5 +80,6 @@ Old MacBook (M1, 8 GB) at home, OrbStack + docker compose: one container for the
 - jobs.cz brand-widget offers (~42 %) expose only a short og:description; is there an allowed full-text source?
 - How the 👍/👎 feedback turns into profile changes in practice (thresholds, cadence).
 - Scoring is sequential at ~15–20 s per offer: a daily delta (~20 offers) takes minutes, the first backlog (~250) over an hour. Add bounded concurrency if that hurts.
-- `profile.md` was drafted by a worker from this file; the user has not reviewed it yet. Scores depend on it.
+- The profile is user data in `data/profile.md`; the committed `profile.md` is only the default template. Scores depend on it.
 - `deploy/cz.jobagent.daily.plist` calls `/usr/local/bin/docker`; check `which docker` on the target Mac (OrbStack) before installing.
+- Ashby Europe filter drops UTC-band remote roles such as Checkly "Remote (UTC-3 to UTC+3)"; whether UTC bands that include CZ count as EU-reachable is undecided.

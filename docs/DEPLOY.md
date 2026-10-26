@@ -40,6 +40,10 @@ rm ~/Library/LaunchAgents/cz.jobagent.daily.plist
 
 Logs: `data/daily.log`.
 
+## Profil
+
+The scoring profile is user data in `data/profile.md` (the `data/` volume, no rebuild needed). On first use it is copied from the committed template `profile.md`. Edit it in the Profil tab or with any editor. The next `daily` or `score` run re-scores every offer under the new profile.
+
 ## Keeping the Mac awake
 
 Scheduled runs need the Mac awake at 06:30 with OrbStack running:

@@ -1,3 +1,4 @@
+<!-- Default template. The live profile is data/profile.md; edit that one or use the Profil tab. -->
 # Profil kandidáta — Filip (Olomouc, CZ)
 
 Tato rubrika slouží k bodování pracovních nabídek na škále 0–10.
