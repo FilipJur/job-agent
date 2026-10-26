@@ -20,6 +20,7 @@ The two lead sessions (lead, creep reviewer) run Opus 5.5 by the user's decision
 1. **Plan:** pick the place and the branch per `docs/PARALLEL.md` (one worker: main checkout on its own branch; 2–4 concurrent: one worktree each). Create them before spawning.
 2. **Prompt:** write `../job-agent-prompts/<slice>-<task>.md`. It must start with the place, the branch and "Files you may change: …". It must end with:
    `When done, write your report to /Users/filip/projects/job-agent-prompts/reports/<slice>-<task>.md (create the directory if missing), then stop.`
+   - **Subagents inside a worker:** a prompt line starting with `orchestrate:` makes the worker split the task across subagents. Use it only when the task has 2+ substantial parts with disjoint files and a boundary fixed in the prompt (e.g. API server vs. React app). Do not use it for core files (`src/db.ts`, `src/types.ts`, `src/pipeline.ts`, `src/repo.ts`), for small tasks or for fix rounds. Name which part owns shared files (`package.json`, `bun.lock`, `tsconfig.json`); the worker verifies once after all parts finish.
 3. **Spawn:** run `scripts/spawn-worker.sh <dir> <prompt-file>`. It prints the pane's terminal id; note the id per task.
    - The first worker opens a separate "workers" window. Later workers split it, up to 4 panes.
    - The pane runs `omp @<prompt-file>` interactively, so the user can watch it and type into it.
