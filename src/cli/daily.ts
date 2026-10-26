@@ -1,6 +1,9 @@
 import { parseArgs } from "node:util";
 import { createHttpClient } from "../collectors/jobscz/http";
 import { openDb } from "../db";
+import { seedAgencies } from "../repo";
+import type { AgencySeed } from "../types";
+import agencies from "../../config/agencies.json";
 import { createCachedFetch, type HttpMode } from "../http-cache";
 import { loadScoringConfig } from "../scoring/config";
 import { runScoring } from "../scoring/run";
@@ -39,6 +42,9 @@ async function main(argv: string[]): Promise<void> {
   const fetchText = createCachedFetch(createHttpClient().fetchText, cache);
   const db = openDb(process.env.DB_PATH || "data/jobs.db");
   try {
+    // Idempotent: a fresh host gets its agencies, an updated checkout refreshes contact data.
+    const seeded = seedAgencies(db, agencies as AgencySeed[]);
+    if (seeded.inserted + seeded.updated > 0) console.log(`agencies: inserted ${seeded.inserted}, updated ${seeded.updated}`);
     const names = Object.keys(COLLECTORS);
     const { due, skipped } = dueSources(db, names, { force });
     if (skipped.length > 0) console.log(`skipped (collected <20h ago): ${skipped.join(", ")}`);

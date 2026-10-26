@@ -6,13 +6,14 @@
   <string>cz.jobagent.daily</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/docker</string>
+    <string>__DOCKER__</string>
     <string>compose</string>
     <string>-f</string>
     <string>__REPO__/docker-compose.yml</string>
     <string>run</string>
     <string>--rm</string>
-    <string>daily</string>
+    <string>-T</string>
+    <string>cli</string>
   </array>
   <key>WorkingDirectory</key>
   <string>__REPO__</string>

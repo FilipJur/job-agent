@@ -1,6 +1,7 @@
 services:
   web:
     build: .
+    image: job-agent:local
     ports:
       - "3000:3000"
     volumes:
@@ -10,9 +11,13 @@ services:
       HOST: "0.0.0.0"
     restart: unless-stopped
 
-  daily:
-    build: .
+  # One-off commands: `docker compose run --rm cli` runs `daily`;
+  # `docker compose run --rm cli <script> [args]` runs any package.json script (score, collect, agencies:seed).
+  cli:
+    image: job-agent:local
+    profiles: ["cli"]
     volumes:
       - ./data:/app/data
     env_file: .env
-    command: ["bun", "run", "daily"]
+    entrypoint: ["bun", "run"]
+    command: ["daily"]
