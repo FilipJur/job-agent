@@ -52,7 +52,7 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
         </button>
       </div>
       <p className="status">Čeká na přehodnocení: {offerCount(pending)}</p>
-      <p className="hint">Přehodnotí se při příštím `daily` nebo `bun run score`.</p>
+      <p className="hint">Přehodnotí se při příštím <code>daily</code> nebo <code>bun run score</code>.</p>
     </section>
   );
 }
