@@ -35,6 +35,12 @@ describe("work mode", () => {
   test("'Možnost občasné práce z domova' tag -> hybrid", () => {
     expect(labelsOf({ tags: "Možnost občasné práce z domova" })).toEqual(["hybrid"]);
   });
+
+  test("'hybridní mobilní aplikace' (no work mode) is not hybrid", () => {
+    expect(
+      labelsOf({ description: "Vyvíjíme hybridní mobilní aplikace pro iOS a Android." }),
+    ).not.toContain("hybrid");
+  });
 });
 
 describe("place", () => {

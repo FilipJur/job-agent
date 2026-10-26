@@ -69,7 +69,13 @@ export const LABEL_RULES: LabelRule[] = [
     label: "hybrid",
     matchers: [
       { fields: TEXT, pattern: /obcasn\w* prace z domova/i },
-      { fields: TEXT, pattern: /\bhybrid/i },
+      // Bare "hybrid" also describes hybrid mobile apps, clouds and cars;
+      // only work-mode phrasing counts.
+      {
+        fields: TEXT,
+        pattern:
+          /\bhybrid\w*[\s-]+(work|working|model|mode|setup|role|office|arrangement|rezim|prace|pracovni|spoluprace|forma)\w*/i,
+      },
     ],
   },
   {
