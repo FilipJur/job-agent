@@ -51,6 +51,24 @@ interface AshbyBoard {
 const CZECH = /\b(czechia|czech|prague|praha|brno|olomouc|ostrava|plzen|pilsen|liberec|zlin|budejovice|cz)\b/;
 /** Text that makes a remote job reachable from Czechia: "Europe", "EU", "Worldwide". */
 const EUROPE = /\b(europe|european|eu|emea|worldwide|anywhere|global)\b/;
+/** CET/CEST (UTC+1/+2) is Czech time; a remote UTC/GMT band covering +1 or +2 is EU-reachable. */
+const CET = /\bces?t\b/;
+const UTC_OFFSET = /(?:utc|gmt)\s*([+-])\s*(\d{1,2})(?:\s*(?:to|-|–|—)\s*(?:utc|gmt)?\s*([+-])\s*(\d{1,2}))?/g;
+
+/** A remote place text whose UTC/GMT offset band includes +1 or +2 (CET/CEST). */
+function utcBandIncludesCz(text: string): boolean {
+  if (CET.test(text)) return true;
+  UTC_OFFSET.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = UTC_OFFSET.exec(text)) !== null) {
+    const first = (match[1] === "-" ? -1 : 1) * Number(match[2]);
+    const second = match[3] === undefined ? first : (match[3] === "-" ? -1 : 1) * Number(match[4]);
+    const lo = Math.min(first, second);
+    const hi = Math.max(first, second);
+    if (lo <= 2 && hi >= 1) return true;
+  }
+  return false;
+}
 
 const MODE_TAGS: Record<string, string> = {
   remote: "fully remote",
@@ -75,7 +93,7 @@ export function isRelevant(job: AshbyJob): boolean {
   const remote = job.isRemote === true || /remote/i.test(job.workplaceType ?? "");
   // A bare "remote" place text names no region: unspecified, like an empty location.
   const specified = texts.filter((text) => text.trim() !== "remote");
-  return remote && (specified.length === 0 || specified.some((text) => EUROPE.test(text)));
+  return remote && (specified.length === 0 || specified.some((text) => EUROPE.test(text) || utcBandIncludesCz(text)));
 }
 
 function workMode(job: AshbyJob): string | null {
