@@ -11,8 +11,6 @@ const THREADS_URL = `${API}/search_by_date?tags=story,author_whoishiring&hitsPer
 export interface HnOptions {
   /** Injected HTTP client (record/replay cache in the CLI); the collector never calls `fetch` itself. */
   fetchText: FetchText;
-  queries?: string[];
-  hitsPerPage?: number;
   /** From `--limit`: every comment carries its full text, so a limited run just asks the first query. */
   limit?: number | null;
 }
@@ -48,9 +46,8 @@ function toRawOffer(hit: HnHit, thread: HnHit, query: string): RawOffer {
 }
 
 export function createHnCollector(opts: HnOptions): Collector {
-  const queries = opts.queries ?? config.hn.queries;
-  const hitsPerPage = opts.hitsPerPage ?? config.hn.hitsPerPage;
   const { fetchText, limit = null } = opts;
+  const { queries, hitsPerPage } = config.hn;
 
   return {
     name: SOURCE,
