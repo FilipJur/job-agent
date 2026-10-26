@@ -63,7 +63,7 @@ export async function runCollectors(
     const same = findBySourceId.get(offer.source, offer.sourceId);
     if (same) {
       // Retry: the stored row only has a card + detail failure, the incoming one has the detail now.
-      if (!hasDetailError(raw) && storedDetailError(same.raw_json)) {
+      if (!hasDetailError(raw.raw) && storedDetailError(same.raw_json)) {
         updateOffer.run(
           offer.description,
           offer.locationText,

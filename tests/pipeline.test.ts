@@ -109,6 +109,24 @@ describe("runCollectors", () => {
       last_seen_at: "2026-10-27T09:30:00.000Z",
     });
     expect(JSON.parse(rows[0]!.raw_json)).toEqual({ id: 1 });
+
+    clock = new Date("2026-10-28T10:00:00Z");
+    const failedAgain = raw({ sourceId: "retry-1", partial: true, description: "", city: null, raw: { detailError: "boom" } });
+    const retry = await runCollectors(db, [fake("fake", [failedAgain])], now);
+
+    expect(retry[0]).toMatchObject({ status: "ok", fetched: 1, new: 0, updated: 0 });
+    const after = db
+      .query<{ description: string; city: string | null; last_seen_at: string; raw_json: string }, []>(
+        "SELECT description, city, last_seen_at, raw_json FROM offers",
+      )
+      .all();
+    expect(after.length).toBe(1);
+    expect(after[0]).toMatchObject({
+      description: "Plný popis",
+      city: "Brno",
+      last_seen_at: "2026-10-28T10:00:00.000Z",
+    });
+    expect(JSON.parse(after[0]!.raw_json)).toEqual({ id: 1 });
   });
 
   test("the same source_id twice within one batch is stored once", async () => {
