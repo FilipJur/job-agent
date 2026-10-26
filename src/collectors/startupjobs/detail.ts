@@ -102,7 +102,7 @@ function salary(ld: JobPostingLd): { salaryMin: number | null; salaryMax: number
   const min = value.minValue !== undefined && value.minValue > 0 ? value.minValue : null;
   const max = value.maxValue !== undefined && value.maxValue > 0 ? value.maxValue : null;
   if (min === null && max === null) return none;
-  return { salaryMin: min ?? max, salaryMax: max ?? min, currency: ld.baseSalary?.currency ?? null };
+  return { salaryMin: min, salaryMax: max, currency: ld.baseSalary?.currency ?? null };
 }
 
 export function parseDetail(body: string): DetailResult {
