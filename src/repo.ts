@@ -153,6 +153,17 @@ export function offersToScore(db: Database, q: OffersToScoreQuery): OfferToScore
   }));
 }
 
+/** Number of offers `offersToScore` would return for this profile hash, without a limit. */
+export function countOffersToScore(db: Database, profileHash: string): number {
+  return db
+    .query<{ n: number }, [string]>(
+      `SELECT COUNT(*) AS n FROM offers o
+      WHERE ${NOT_EXCLUDED}
+        AND NOT EXISTS (SELECT 1 FROM offer_scores s WHERE s.offer_id = o.id AND s.profile_hash = ?)`,
+    )
+    .get(profileHash)!.n;
+}
+
 function labelsByOffer(db: Database, ids: number[]): Map<number, string[]> {
   const byOffer = new Map<number, string[]>();
   if (ids.length === 0) return byOffer;
@@ -192,6 +203,7 @@ export function saveFeedback(db: Database, offerId: number, verdict: Verdict, re
 }
 
 interface AgencyDbRow {
+  contact_url: string | null;
   id: number;
   name: string;
   web: string | null;
@@ -210,7 +222,7 @@ interface AgencyDbRow {
 }
 
 const AGENCY_COLS =
-  "id, name, web, city, focus, stack, signal, email, phone, fit, status, notes, last_contact_at, created_at, updated_at";
+  "id, name, web, city, focus, stack, signal, email, phone, contact_url, fit, status, notes, last_contact_at, created_at, updated_at";
 
 function toAgencyRow(r: AgencyDbRow): AgencyRow {
   return {
@@ -223,6 +235,7 @@ function toAgencyRow(r: AgencyDbRow): AgencyRow {
     signal: r.signal,
     email: r.email,
     phone: r.phone,
+    contactUrl: r.contact_url,
     fit: r.fit,
     status: r.status,
     notes: r.notes,
@@ -263,37 +276,36 @@ export function updateAgency(db: Database, id: number, patch: AgencyPatch): Agen
 }
 
 /**
- * Inserts agencies by name; existing names are skipped without touching
- * their status or notes.
+ * Inserts agencies by name. Existing names only get their contact fields
+ * (web, email, phone, contact_url) refreshed; status, notes and last contact stay.
  */
-export function seedAgencies(db: Database, items: AgencySeed[]): { inserted: number; skipped: number } {
+export function seedAgencies(db: Database, items: AgencySeed[]): { inserted: number; updated: number; skipped: number } {
   const now = new Date().toISOString();
   const insert = db.prepare(
     `INSERT OR IGNORE INTO agencies
-      (name, web, city, focus, stack, signal, email, phone, fit, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)`,
+      (name, web, city, focus, stack, signal, email, phone, contact_url, fit, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)`,
+  );
+  const refresh = db.prepare(
+    `UPDATE agencies SET web = ?, email = ?, phone = ?, contact_url = ?, updated_at = ?
+     WHERE name = ? AND (web IS NOT ? OR email IS NOT ? OR phone IS NOT ? OR contact_url IS NOT ?)`,
   );
   const changed = db.query<{ n: number }, []>("SELECT changes() AS n");
   let inserted = 0;
+  let updated = 0;
   let skipped = 0;
   db.transaction(() => {
     for (const a of items) {
-      insert.run(
-        a.name,
-        a.web ?? null,
-        a.city ?? null,
-        a.focus ?? null,
-        a.stack ?? null,
-        a.signal ?? null,
-        a.email ?? null,
-        a.phone ?? null,
-        a.fit,
-        now,
-        now,
-      );
-      if ((changed.get()?.n ?? 0) === 1) inserted += 1;
+      const [web, email, phone, contactUrl] = [a.web ?? null, a.email ?? null, a.phone ?? null, a.contact_url ?? null];
+      insert.run(a.name, web, a.city ?? null, a.focus ?? null, a.stack ?? null, a.signal ?? null, email, phone, contactUrl, a.fit, now, now);
+      if ((changed.get()?.n ?? 0) === 1) {
+        inserted += 1;
+        continue;
+      }
+      refresh.run(web, email, phone, contactUrl, now, a.name, web, email, phone, contactUrl);
+      if ((changed.get()?.n ?? 0) === 1) updated += 1;
       else skipped += 1;
     }
   })();
-  return { inserted, skipped };
+  return { inserted, updated, skipped };
 }

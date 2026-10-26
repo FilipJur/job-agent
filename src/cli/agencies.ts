@@ -6,8 +6,8 @@ import seed from "../../config/agencies.json";
 const db = openDb(process.env.DB_PATH || "data/jobs.db");
 try {
   const items: AgencySeed[] = seed;
-  const { inserted, skipped } = seedAgencies(db, items);
-  console.log(`agencies: inserted ${inserted}, skipped ${skipped}`);
+  const { inserted, updated, skipped } = seedAgencies(db, items);
+  console.log(`agencies: inserted ${inserted}, updated ${updated}, skipped ${skipped}`);
 } finally {
   db.close();
 }

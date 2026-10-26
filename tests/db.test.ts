@@ -110,4 +110,16 @@ describe("openDb on a file", () => {
     }
     migrated.close();
   });
+
+  test("an agencies table without contact_url gains the column and keeps its rows", () => {
+    const oldPath = join(dir, "agencies-old.db");
+    const old = new Database(oldPath, { create: true });
+    old.run("CREATE TABLE agencies (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, fit INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'new', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)");
+    old.run("INSERT INTO agencies (name, fit, created_at, updated_at) VALUES ('A', 3, 't', 't')");
+    old.close();
+
+    const migrated = openDb(oldPath);
+    expect(migrated.query("SELECT name, contact_url FROM agencies").all()).toEqual([{ name: "A", contact_url: null }]);
+    migrated.close();
+  });
 });

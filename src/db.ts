@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS agencies (
   focus           TEXT,
   stack           TEXT,
   signal          TEXT,
+  contact_url     TEXT,
   email           TEXT,
   phone           TEXT,
   fit             INTEGER NOT NULL,
@@ -111,5 +112,6 @@ export function openDb(path: string): Database {
   addColumnIfMissing(db, "offers", "partial", "INTEGER NOT NULL DEFAULT 0", PARTIAL_BACKFILL);
   addColumnIfMissing(db, "runs", "partial", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "runs", "detail_errors", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(db, "agencies", "contact_url", "TEXT");
   return db;
 }
