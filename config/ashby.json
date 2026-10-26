@@ -1,0 +1,9 @@
+{
+  "ashby": {
+    "orgs": [
+      { "id": "apify", "name": "Apify" },
+      { "id": "rohlik", "name": "Rohlík" },
+      { "id": "checkly", "name": "Checkly" }
+    ]
+  }
+}

@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { createAshbyCollector } from "../collectors/ashby";
 import { createJobsCzCollector } from "../collectors/jobscz";
 import { createHttpClient } from "../collectors/jobscz/http";
 import { openDb } from "../db";
@@ -8,6 +9,8 @@ import type { Collector, FetchText } from "../types";
 
 type Ctx = { fetchText: FetchText; limit: number | null; isKnown: (id: string) => boolean };
 export const COLLECTORS: Record<string, (ctx: Ctx) => Collector> = {
+  ashby: ({ fetchText, limit }) =>
+    createAshbyCollector({ fetchText, ...(limit === null ? {} : { maxOrgs: limit }) }),
   jobscz: ({ fetchText, limit, isKnown }) =>
     createJobsCzCollector({
       fetchText,
