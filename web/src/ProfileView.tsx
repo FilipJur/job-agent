@@ -47,12 +47,12 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
         onChange={(event) => setText(event.target.value)}
       />
       <div className="profile-actions">
-        <button type="button" className="filter" disabled={saving} onClick={() => void save()}>
+        <button type="button" className="filter" disabled={saving || text.trim() === ""} onClick={() => void save()}>
           Uložit
         </button>
       </div>
       <p className="status">Čeká na přehodnocení: {offerCount(pending)}</p>
-      <p className="hint">Přehodnotí se při příštím `daily` nebo `bun run score`.</p>
+      <p className="hint">Přehodnotí se při příštím <code>daily</code> nebo <code>bun run score</code>.</p>
     </section>
   );
 }

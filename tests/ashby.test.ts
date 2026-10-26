@@ -58,6 +58,9 @@ describe("ashby board parsing", () => {
     expect(isRelevant(job({ isRemote: true }))).toBe(true);
     expect(isRelevant(job({ isRemote: true, location: "Europe" }))).toBe(true);
     expect(isRelevant(job({ isRemote: true, location: "Remote" }))).toBe(true);
+    expect(isRelevant(job({ isRemote: true, location: "Remote (UTC-3 to UTC+3)" }))).toBe(true);
+    expect(isRelevant(job({ isRemote: true, location: "Remote (CET)" }))).toBe(true);
+    expect(isRelevant(job({ isRemote: true, location: "Remote (UTC-8 to UTC-5)" }))).toBe(false);
     expect(isRelevant(job({ isRemote: true, location: "Remote - United States" }))).toBe(false);
     expect(isRelevant(job({ workplaceType: "OnSite", location: "Berlin, Germany" }))).toBe(false);
   });
@@ -100,7 +103,7 @@ describe("ashby collector", () => {
       "https://api.ashbyhq.com/posting-api/job-board/ghost?includeCompensation=true",
       "https://api.ashbyhq.com/posting-api/job-board/checkly?includeCompensation=true",
     ]);
-    expect(offers.length).toBe(3);
+    expect(offers.length).toBe(4);
   });
 
   test("caps the org requests with maxOrgs", async () => {

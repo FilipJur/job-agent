@@ -128,6 +128,8 @@ describe("profile API", () => {
       db.run("INSERT INTO offer_scores (offer_id, score, reason, gaps, model, profile_hash, scored_at) VALUES (?, 8, '', '', 't', ?, 't')", [id, profileHashOf("profile v2")]);
       expect(await call("/api/profile")).toMatchObject({ status: 200, body: { text: "profile v2", pending: 0 } });
       expect((await send("PUT", "/api/profile", {})).status).toBe(400);
+      expect((await send("PUT", "/api/profile", { text: "  \n" })).status).toBe(400);
+      expect(await Bun.file(process.env.PROFILE_PATH).text()).toBe("profile v2");
     } finally {
       if (previous === undefined) delete process.env.PROFILE_PATH;
       else process.env.PROFILE_PATH = previous;
