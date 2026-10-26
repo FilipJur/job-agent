@@ -33,8 +33,7 @@ export const LABEL_RULES: LabelRule[] = [
     matchers: [
       { fields: TEXT, pattern: /pracovni smlouv/i },
       { fields: TEXT, pattern: /\bHPP\b/i },
-      { fields: TEXT, pattern: /full[- ]?time/i },
-      { fields: ["tags"], pattern: /\bFULL_TIME\b|\bEMPLOYEE\b/ },
+      { fields: TEXT, pattern: /zamestnaneck\w* pomer/i },
     ],
   },
   {

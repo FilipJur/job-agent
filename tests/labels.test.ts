@@ -9,6 +9,10 @@ describe("contract form", () => {
   test("HPP and IČO both apply (labels are independent)", () => {
     expect(labelsOf({ description: "Nabízíme HPP nebo spolupráci na IČO." })).toEqual(["hpp", "ico"]);
   });
+
+  test("'plný úvazek' with IČO gives ico only, not hpp", () => {
+    expect(labelsOf({ tags: "Práce na plný úvazek", description: "práce na živnostenský list (IČO)" })).toEqual(["ico"]);
+  });
 });
 
 describe("exclusion", () => {
