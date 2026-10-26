@@ -1,6 +1,7 @@
 # AGENTS.md
 
 Personal job-search agent: collects job offers daily, labels and scores them against one candidate profile, serves a small web UI. Runs on a home Mac (M1, 8 GB) via OrbStack/Docker.
+Goals, scope, sources and roadmap: `docs/VISION.md`. Read it before starting a slice.
 
 ## Stack
 - Bun + TypeScript (strict), SQLite via `bun:sqlite`, tests via `bun test`.
@@ -27,5 +28,6 @@ Personal job-search agent: collects job offers daily, labels and scores them aga
 
 ## Workflow
 - Work on the slice given in the task prompt only; do not start the next slice.
+- Work only in the worktree and branch named in the prompt; change only the files the prompt allows. Never merge, rebase, or touch `main`. Rules for parallel sessions: `docs/PARALLEL.md`.
 - Commit locally in atomic commits. Never push.
 - Finish with a report: what changed (files), commands run with their real output, known gaps.
