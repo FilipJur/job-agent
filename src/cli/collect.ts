@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
 import { createJobsCzCollector } from "../collectors/jobscz";
 import { createHttpClient } from "../collectors/jobscz/http";
+import { createStartupJobsCollector } from "../collectors/startupjobs";
 import { openDb } from "../db";
 import { createCachedFetch, type HttpMode } from "../http-cache";
 import { runCollectors, storedDetailError } from "../pipeline";
@@ -13,6 +14,12 @@ export const COLLECTORS: Record<string, (ctx: Ctx) => Collector> = {
       fetchText,
       isKnown,
       ...(limit === null ? {} : { maxPagesPerKeyword: 1, maxDetails: limit }),
+    }),
+  startupjobs: ({ fetchText, limit, isKnown }) =>
+    createStartupJobsCollector({
+      fetchText,
+      isKnown,
+      ...(limit === null ? {} : { maxDetails: limit }),
     }),
 };
 
