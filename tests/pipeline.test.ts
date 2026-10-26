@@ -154,7 +154,13 @@ describe("runCollectors", () => {
   });
 
   test("a run counts partial offers and detail errors, independently", async () => {
+    await runCollectors(
+      db,
+      [fake("fake", [raw({ sourceId: "r0", title: "Already known", partial: true, raw: { detailError: "HTTP 500" } })])],
+      now,
+    );
     const offers = [
+      raw({ sourceId: "r0", title: "Already known", partial: true, raw: { detailError: "HTTP 500" } }),
       raw({ sourceId: "r1", title: "Partial with error", partial: true, raw: { detailError: "HTTP 503" } }),
       raw({ sourceId: "r2", title: "Partial, empty error", partial: true, raw: { detailError: "" } }),
       raw({ sourceId: "r3", title: "Full with error", partial: false, raw: { detailError: "timeout" } }),
@@ -163,8 +169,13 @@ describe("runCollectors", () => {
 
     const summaries = await runCollectors(db, [fake("fake", offers)], now);
 
-    expect(summaries[0]).toMatchObject({ status: "ok", fetched: 4, new: 4, partial: 2, detailErrors: 2 });
-    expect(db.query("SELECT partial, detail_errors FROM runs").get()).toEqual({ partial: 2, detail_errors: 2 });
+    expect(summaries[0]).toMatchObject({ status: "ok", fetched: 5, new: 4, partial: 2, detailErrors: 2 });
+    expect(db.query("SELECT partial, detail_errors, fetched, new FROM runs ORDER BY id DESC LIMIT 1").get()).toEqual({
+      partial: 2,
+      detail_errors: 2,
+      fetched: 5,
+      new: 4,
+    });
   });
   test("a store failure rolls back the whole collector batch and records the error", async () => {
     const valid = raw({ sourceId: "30", title: "Valid" });

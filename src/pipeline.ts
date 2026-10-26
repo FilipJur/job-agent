@@ -78,9 +78,10 @@ export async function runCollectors(
     for (const label of offer.labels) insertLabel.run(row!.id, label);
     return true;
   };
-  const storeBatch = db.transaction((offers: Offer[], at: string) => {
-    let inserted = 0;
-    for (const offer of offers) if (store(offer, at)) inserted++;
+  /** Stores a batch; returns the raw offers that produced a new row (known offers only bump `last_seen_at`). */
+  const storeBatch = db.transaction((pairs: { raw: RawOffer; offer: Offer }[], at: string) => {
+    const inserted: RawOffer[] = [];
+    for (const p of pairs) if (store(p.offer, at)) inserted.push(p.raw);
     return inserted;
   });
 
@@ -100,9 +101,13 @@ export async function runCollectors(
       const raw = await collector.collect();
       summary.fetched = raw.length;
       const offers = raw.map((r) => normalize(r));
-      summary.new = storeBatch(offers, now().toISOString());
-      summary.partial = raw.filter((r) => r.partial === true).length;
-      summary.detailErrors = raw.filter(hasDetailError).length;
+      const inserted = storeBatch(
+        raw.map((r, i) => ({ raw: r, offer: offers[i]! })),
+        now().toISOString(),
+      );
+      summary.new = inserted.length;
+      summary.partial = inserted.filter((r) => r.partial === true).length;
+      summary.detailErrors = inserted.filter(hasDetailError).length;
     } catch (err) {
       summary.status = "error";
       summary.error = err instanceof Error ? err.message : String(err);
