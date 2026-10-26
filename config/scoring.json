@@ -1,0 +1,9 @@
+{
+  "model": "mimo-v2.6-flash",
+  "endpoint": "https://opencode.ai/zen/go/v1/chat/completions",
+  "maxDescriptionChars": 4000,
+  "prices": {
+    "inputPer1M": 0.14,
+    "outputPer1M": 0.28
+  }
+}
