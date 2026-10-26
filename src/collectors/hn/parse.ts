@@ -9,7 +9,7 @@ export interface HnHit {
   author?: string | null;
 }
 
-export const HIRING_PREFIX = "Ask HN: Who is hiring?";
+const HIRING_PREFIX = "Ask HN: Who is hiring?";
 
 const hitsOf = (body: string): HnHit[] => {
   const parsed: unknown = JSON.parse(body);
@@ -34,7 +34,7 @@ export function topLevelComments(body: string, storyId: string): HnHit[] {
   );
 }
 
-export interface Header {
+interface Header {
   company: string | null;
   title: string;
   locationText: string | null;
