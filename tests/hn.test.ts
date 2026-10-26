@@ -71,6 +71,12 @@ describe("hn header mapping", () => {
     expect(parsed.tags).toContain("contractor");
     expect(parseHeader("No separator here").title).toBe("No separator here");
   });
+
+  test("role segment never becomes the location when a URL sits between them", () => {
+    const coder = parseHeader("Coder | https://coder.com/ | Multiple roles | Multiple locations");
+    expect(coder.title).toBe("Multiple roles");
+    expect(coder.locationText).toBe("Multiple locations");
+  });
 });
 
 describe("hn collector", () => {
