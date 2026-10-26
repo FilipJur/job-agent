@@ -3,9 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "agencies:seed": "bun run src/cli/agencies.ts",
     "collect": "bun run src/cli/collect.ts",
+    "score": "bun run src/cli/score.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "web": "bun run src/web/server.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
