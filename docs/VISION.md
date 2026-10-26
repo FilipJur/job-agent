@@ -66,6 +66,7 @@ Old MacBook (M1, 8 GB) at home, OrbStack + docker compose: one container for the
 
 ## Roadmap
 - **v0** ✅: (1) scaffold + jobs.cz + rule labels · (1.5) dev mode: HTTP record/replay cache, skip known details, `--source`/`--limit` · (1.6) cleanup: trim CLI, retry failed details · (2) startupjobs, Workable, Ashby, HN collectors · (3) LLM scoring + `profile.md` · (4) web UI + agencies seed · (5) docker compose + daily schedule (`docs/DEPLOY.md`).
+- **v0.1** ✅: profile as user data in `data/profile.md` + Profil tab · scoring concurrency 4 · agency contact forms.
 - **Later**: Jev typed judge to validate scoring against his labels; Framer Motion polish; morning notification; rate statistics from budgets/salaries; draft replies from verified `facts.md` only.
 
 ## Decisions log
@@ -75,11 +76,10 @@ Old MacBook (M1, 8 GB) at home, OrbStack + docker compose: one container for the
 - Deterministic collectors + rules before LLM: cheaper, testable, debuggable.
 - `hpp` means a contract type, not workload: "full-time" alone does not imply `hpp`.
 - jobs.cz city search uses a 50 km radius; location comes from the offer detail.
+- Ashby: a remote role whose UTC/GMT band covers +1 or +2 (CET/CEST) counts as EU-reachable.
+- The profile belongs to the user (`data/profile.md`); agents write it only when asked; an empty profile is rejected.
 
 ## Open questions
 - jobs.cz brand-widget offers (~42 %) expose only a short og:description; is there an allowed full-text source?
 - How the 👍/👎 feedback turns into profile changes in practice (thresholds, cadence).
-- Scoring is sequential at ~15–20 s per offer: a daily delta (~20 offers) takes minutes, the first backlog (~250) over an hour. Add bounded concurrency if that hurts.
-- The profile is user data in `data/profile.md`; the committed `profile.md` is only the default template. Scores depend on it.
 - `deploy/cz.jobagent.daily.plist` calls `/usr/local/bin/docker`; check `which docker` on the target Mac (OrbStack) before installing.
-- Ashby Europe filter drops UTC-band remote roles such as Checkly "Remote (UTC-3 to UTC+3)"; whether UTC bands that include CZ count as EU-reachable is undecided.
