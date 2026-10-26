@@ -46,6 +46,46 @@ CREATE TABLE IF NOT EXISTS runs (
   partial     INTEGER NOT NULL DEFAULT 0,
   detail_errors INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS offer_scores (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  offer_id     INTEGER NOT NULL REFERENCES offers (id) ON DELETE CASCADE,
+  score        REAL NOT NULL CHECK (score >= 0 AND score <= 10),
+  reason       TEXT NOT NULL,
+  gaps         TEXT NOT NULL,
+  model        TEXT NOT NULL,
+  profile_hash TEXT NOT NULL,
+  scored_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_offer_scores_offer ON offer_scores (offer_id);
+
+CREATE TABLE IF NOT EXISTS feedback (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  offer_id   INTEGER NOT NULL REFERENCES offers (id) ON DELETE CASCADE,
+  verdict    TEXT NOT NULL CHECK (verdict IN ('up', 'down', 'responded', 'hidden')),
+  reason     TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_offer ON feedback (offer_id);
+
+CREATE TABLE IF NOT EXISTS agencies (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  name            TEXT NOT NULL UNIQUE,
+  web             TEXT,
+  city            TEXT,
+  focus           TEXT,
+  stack           TEXT,
+  signal          TEXT,
+  email           TEXT,
+  phone           TEXT,
+  fit             INTEGER NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'new'
+    CHECK (status IN ('new', 'contacted', 'replied', 'meeting', 'work', 'declined')),
+  notes           TEXT,
+  last_contact_at TEXT,
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL
+);
 `;
 
 const PARTIAL_BACKFILL = `

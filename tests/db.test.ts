@@ -91,4 +91,23 @@ describe("openDb on a file", () => {
     expect(migrated.query("SELECT partial, detail_errors FROM runs").get()).toEqual({ partial: 0, detail_errors: 0 });
     migrated.close();
   });
+
+  test("an existing database gains offer_scores, feedback and agencies while keeping its offers", () => {
+    const legacyPath = join(dir, "legacy.db");
+    const legacy = openDb(legacyPath);
+    const id = insertOffer(legacy, "kept");
+    legacy.run("INSERT INTO offer_labels (offer_id, label, origin) VALUES (?, 'hpp', 'rule')", [id]);
+    legacy.run("DROP TABLE offer_scores");
+    legacy.run("DROP TABLE feedback");
+    legacy.run("DROP TABLE agencies");
+    legacy.close();
+
+    const migrated = openDb(legacyPath);
+    expect(migrated.query("SELECT COUNT(*) AS n FROM offers").get()).toEqual({ n: 1 });
+    expect(migrated.query("SELECT label FROM offer_labels").get()).toEqual({ label: "hpp" });
+    for (const table of ["offer_scores", "feedback", "agencies"]) {
+      expect(migrated.query(`SELECT COUNT(*) AS n FROM ${table}`).get()).toEqual({ n: 0 });
+    }
+    migrated.close();
+  });
 });
