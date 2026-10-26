@@ -64,7 +64,7 @@ Agencies: discovered once via firmy.cz "Webdesign" (okres Olomouc) + web search;
 Old MacBook (M1, 8 GB) at home, OrbStack + docker compose: one container for the daily collect/score job, one for the web. Access via LAN or Tailscale; no public exposure, no auth. Secrets only in `.env`.
 
 ## Roadmap
-- **v0**: (1) scaffold + jobs.cz + rule labels ✅ (review fixes pending) · (2) remaining sources · (3) LLM scoring + `profile.md` · (4) web UI + agencies seed · (5) docker compose + daily schedule.
+- **v0**: (1) scaffold + jobs.cz + rule labels ✅ · (1.5) dev mode: HTTP record/replay cache, skip known details, `--source`/`--limit` ✅ · (1.6) cleanup: trim CLI, retry failed details · (2) remaining sources · (3) LLM scoring + `profile.md` · (4) web UI + agencies seed · (5) docker compose + daily schedule.
 - **Later**: Jev typed judge to validate scoring against his labels; Framer Motion polish; morning notification; rate statistics from budgets/salaries; draft replies from verified `facts.md` only.
 
 ## Decisions log
