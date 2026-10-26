@@ -106,7 +106,11 @@ function addColumnIfMissing(db: Database, table: string, column: string, definit
 export function openDb(path: string): Database {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
-  db.run("PRAGMA journal_mode = WAL");
+  // No WAL: its shared-memory index (-shm) is not shared between the macOS host and Docker
+  // containers on a bind mount, so web and cli saw different database states.
+  db.run("PRAGMA journal_mode = DELETE");
+  // web and cli share the file; wait for the other writer instead of failing with SQLITE_BUSY.
+  db.run("PRAGMA busy_timeout = 5000");
   db.run("PRAGMA foreign_keys = ON");
   db.run(SCHEMA);
   addColumnIfMissing(db, "offers", "partial", "INTEGER NOT NULL DEFAULT 0", PARTIAL_BACKFILL);
