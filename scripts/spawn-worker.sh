@@ -1,18 +1,21 @@
 #!/bin/sh
-# Open an omp worker session in a Ghostty pane. Usage: scripts/spawn-worker.sh <dir> <prompt-file>
+# Open an omp worker session in a Ghostty pane. Usage: scripts/spawn-worker.sh <dir> <prompt-file> [model]
 # The first worker opens a new "workers" window; later ones split it (right, down, right). Max 4.
+# [model] overrides the project policy only when the user asks for a specific model (docs/LEAD.md).
 # Prints the pane's terminal id. Docs: docs/LEAD.md.
 set -eu
-[ $# -eq 2 ] || { echo "usage: $0 <dir> <prompt-file>" >&2; exit 2; }
+[ $# -eq 2 ] || [ $# -eq 3 ] || { echo "usage: $0 <dir> <prompt-file> [model]" >&2; exit 2; }
 dir=$(cd "$1" && pwd)
 prompt=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
 [ -f "$prompt" ] || { echo "no prompt file: $prompt" >&2; exit 2; }
 state="${TMPDIR:-/tmp}/job-agent-workers-window"
+model_flag=""
+[ $# -eq 3 ] && model_flag="--model=$3 "
 window=$(cat "$state" 2>/dev/null || true)
 
-osascript - "$dir" "$prompt" "$window" "$state" <<'EOF'
+osascript - "$dir" "$prompt" "$window" "$state" "$model_flag" <<'EOF'
 on run argv
-  set {d, p, winId, stateFile} to argv
+  set {d, p, winId, stateFile, modelFlag} to argv
   tell application "Ghostty"
     set cfg to new surface configuration
     set initial working directory of cfg to d
@@ -31,7 +34,7 @@ on run argv
       set t to terminal 1 of selected tab of w
       do shell script "printf %s " & quoted form of (id of w as text) & " > " & quoted form of stateFile
     end if
-    input text "omp @" & quoted form of p to t
+    input text "omp " & modelFlag & "@" & quoted form of p to t
     send key "enter" to t
     return id of t
   end tell

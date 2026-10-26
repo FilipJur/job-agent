@@ -12,7 +12,7 @@ Read this before dispatching any worker. The lead spawns and watches workers its
 
 The two lead sessions (lead, creep reviewer) run Opus 5.5 by the user's decision and are not restarted; the policy above applies to workers only.
 
-- Do not pass `--model` to workers and do not switch models in a worker session.
+- Do not pass `--model` to workers and do not switch models in a worker session, unless the user asks for a specific model for a task: then pass it as the third argument of `scripts/spawn-worker.sh`.
 - The file applies only when omp starts in a directory that contains it. A worktree created from `main` has it. A directory outside the repo does not.
 - Check the policy from the working directory with `omp config get modelRoles`.
 
