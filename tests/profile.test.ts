@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readProfile, writeProfile } from "../src/profile";
+import { readProfile, stripTemplateComment, writeProfile } from "../src/profile";
 
 const dir = mkdtempSync(join(tmpdir(), "job-agent-profile-"));
 const previous = process.env.PROFILE_PATH;
@@ -16,7 +16,10 @@ afterAll(() => {
 
 test("a missing profile is created from the template; writeProfile round-trips", () => {
   expect(existsSync(process.env.PROFILE_PATH!)).toBe(false);
-  expect(readProfile()).toBe(readFileSync(join(import.meta.dir, "..", "profile.md"), "utf8"));
+  const template = readFileSync(join(import.meta.dir, "..", "profile.md"), "utf8");
+  const first = readProfile();
+  expect(first).not.toContain("<!--");
+  expect(first).toBe(stripTemplateComment(template));
   expect(existsSync(process.env.PROFILE_PATH!)).toBe(true);
 
   writeProfile("# moje\n");
