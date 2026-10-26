@@ -47,7 +47,7 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
         onChange={(event) => setText(event.target.value)}
       />
       <div className="profile-actions">
-        <button type="button" className="filter" disabled={saving} onClick={() => void save()}>
+        <button type="button" className="filter" disabled={saving || text.trim() === ""} onClick={() => void save()}>
           Uložit
         </button>
       </div>

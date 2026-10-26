@@ -9,7 +9,7 @@ export function profilePath(): string {
   return process.env.PROFILE_PATH || "data/profile.md";
 }
 
-/** Reads the live profile; a missing file is first created from the committed template. */
+/** The template without its leading `<!-- … -->` note, which is meant for repo readers, not the model. */
 export function stripTemplateComment(template: string): string {
   return template.replace(/^<!--[\s\S]*?-->\r?\n/, "");
 }

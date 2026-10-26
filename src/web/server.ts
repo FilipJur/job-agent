@@ -115,6 +115,8 @@ async function putProfile(req: Request, db: Database): Promise<Response> {
   const parsed = await readObject(req);
   if (!parsed.ok) return parsed.response;
   if (typeof parsed.body.text !== "string") return fail(400, "text must be a string");
+  // An empty profile would re-score every offer against nothing.
+  if (parsed.body.text.trim() === "") return fail(400, "text must not be empty");
   writeProfile(parsed.body.text);
   return profileStatus(db);
 }
