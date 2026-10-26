@@ -1,18 +1,9 @@
 import { parseArgs } from "node:util";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { openDb } from "../db";
+import { loadScoringConfig } from "../scoring/config";
 import { runScoring } from "../scoring/run";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const scoringConfig = JSON.parse(readFileSync(join(root, "config", "scoring.json"), "utf8")) as {
-  model: string;
-  endpoint: string;
-  maxDescriptionChars: number;
-  prices: { inputPer1M: number; outputPer1M: number };
-};
-const profile = readFileSync(join(root, "profile.md"), "utf8");
+const { config: scoringConfig, profile } = loadScoringConfig();
 
 async function main(argv: string[]): Promise<void> {
   let limit: number | undefined;

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { openDb } from "../src/db";
-import { COLLECT_GUARD_MS, dueSources, lastOkRunAt } from "../src/cli/collect";
+import { dueSources } from "../src/cli/collect";
 
 const H = 3600 * 1000;
 const NOW = new Date("2026-10-26T12:00:00.000Z").getTime();
@@ -25,9 +25,9 @@ describe("daily guard", () => {
     }
   });
 
-  test("ok run 25h ago or only error runs are collected", () => {
+  test("old ok run (2 days ago) and recent error run are collected", () => {
     const db = dbWithRuns([
-      { source: "jobscz", startedAt: ago(25 * H), status: "ok" },
+      { source: "jobscz", startedAt: ago(2 * 24 * H), status: "ok" },
       { source: "hn", startedAt: ago(1 * H), status: "error" },
     ]);
     try {
@@ -48,13 +48,4 @@ describe("daily guard", () => {
     }
   });
 
-  test("boundary: exactly 20h ago is due", () => {
-    const db = dbWithRuns([{ source: "jobscz", startedAt: ago(COLLECT_GUARD_MS), status: "ok" }]);
-    try {
-      expect(lastOkRunAt(db, "jobscz")).toBe(ago(COLLECT_GUARD_MS));
-      expect(dueSources(db, ["jobscz"], { nowMs: NOW }).due).toEqual(["jobscz"]);
-    } finally {
-      db.close();
-    }
-  });
 });

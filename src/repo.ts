@@ -18,7 +18,7 @@ import type {
  * (by timestamp, then id) is the current one.
  */
 
-export interface ListOffersQuery {
+interface ListOffersQuery {
   tab: Tab;
   onlyNew?: boolean;
   remote?: boolean;
@@ -26,7 +26,7 @@ export interface ListOffersQuery {
   includeHidden?: boolean;
 }
 
-export interface OffersToScoreQuery {
+interface OffersToScoreQuery {
   profileHash: string;
   limit?: number;
 }

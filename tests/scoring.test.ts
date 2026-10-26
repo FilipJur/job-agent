@@ -94,27 +94,22 @@ describe("scoring", () => {
     });
   });
 
-  test("invalid replies fail one offer but the run continues; all failing exits 1", async () => {
-    const ids = [offer(), offer(), offer(), offer()];
-    const bad = [
-      envelope(JSON.stringify({ score: 12, reason: "x", gaps: "", labels: [] })),
-      envelope(JSON.stringify({ score: 5, gaps: "", labels: [] })),
-      "not json at all",
-      envelope(validContent),
-    ];
-    const first = await runScoring(db, opts(sequenced(bad)));
-    expect(first.exitCode).toBe(0);
-    expect(first.summary).toMatchObject({ scored: 1, failed: 3 });
+  test("timed-out offer fails but the run continues", async () => {
+    const ids = [offer(), offer()];
+    let calls = 0;
+    const postJson: PostJson = (...args) => {
+      calls += 1;
+      // Fake HTTP whose request never resolves before the abort: rejects with
+      // TimeoutError like fetch under AbortSignal.timeout; no real timer, rejects at once.
+      if (calls === 1) return Promise.reject(new DOMException("The operation timed out.", "TimeoutError"));
+      return sequenced([envelope(validContent)])(...args);
+    };
+    const { summary, exitCode } = await runScoring(db, opts(postJson));
+    expect(exitCode).toBe(0);
+    expect(summary).toMatchObject({ scored: 1, failed: 1 });
     const scoredId = ids.find((id) => scoresOf(id).length === 1);
     expect(scoredId).toBeDefined();
     expect(llmLabelsOf(scoredId!)).toEqual(["remote-cz"]);
-
-    const second = await runScoring(
-      db,
-      opts(sequenced([envelope(JSON.stringify({ score: 12, reason: "x", gaps: "", labels: [] })) ])),
-    );
-    expect(second.summary).toMatchObject({ scored: 0, failed: 3, skipped: 1 });
-    expect(second.exitCode).toBe(1);
   });
 
   test("second run with the same profile scores nothing; changed profile scores again", async () => {

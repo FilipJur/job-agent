@@ -19,6 +19,10 @@ bun run agencies:seed
 
 ## Schedule install
 
+Check the docker path first (`which docker`); OrbStack usually provides
+`/usr/local/bin/docker`. If the path differs, replace `/usr/local/bin/docker`
+in the plist with the actual path.
+
 Replace `__REPO__` with the checkout path (`/Users/filip/projects/job-agent`):
 
 ```sh
@@ -63,7 +67,7 @@ docker compose up -d web
 ## Backup
 
 ```sh
-cp data/jobs.db "data/jobs.db.$(date +%F).bak"
+sqlite3 data/jobs.db ".backup 'data/jobs.db.$(date +%F).bak'"
 ```
 
 Back up `data/jobs.db` before updates; restore by stopping `web` and copying the backup back.

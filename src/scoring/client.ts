@@ -1,4 +1,5 @@
 import type { OfferToScore } from "../types";
+import { SCORING_TIMEOUT_MS } from "./config";
 
 /** Labels the LLM may assign; anything else in the reply is dropped. */
 export const LLM_LABELS = ["remote-cz", "remote-eu", "ai-first"] as const;
@@ -31,6 +32,7 @@ export const defaultPostJson: PostJson = async (url, body, apiKey, sessionId) =>
       "x-opencode-session": sessionId,
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(SCORING_TIMEOUT_MS),
   });
   return { status: res.status, body: await res.text() };
 };
@@ -56,7 +58,7 @@ const JSON_SCHEMA_FORMAT = {
         score: { type: "number", minimum: 0, maximum: 10 },
         reason: { type: "string" },
         gaps: { type: "string" },
-        labels: { type: "array", items: { type: "string", enum: ["remote-cz", "remote-eu", "ai-first"] } },
+        labels: { type: "array", items: { type: "string", enum: [...LLM_LABELS] } },
       },
       required: ["score", "reason", "gaps", "labels"],
       additionalProperties: false,
@@ -77,7 +79,7 @@ export function buildUserMessage(offer: OfferToScore, maxDescriptionChars: numbe
     `Ohodnoť tuto nabídku podle profilu v systémové zprávě. Odpověz pouze JSON objektem ` +
       `{"score": number 0-10, "reason": string, "gaps": string, "labels": string[]}, ` +
       `kde reason je jedna věta česky, gaps je stručně česky co kandidátovi chybí ("" pokud nic) ` +
-      `a labels obsahuje pouze hodnoty z ["remote-cz", "remote-eu", "ai-first"].`,
+      `a labels obsahuje pouze hodnoty z ${JSON.stringify([...LLM_LABELS])}.`,
   ];
   return lines.join("\n");
 }
