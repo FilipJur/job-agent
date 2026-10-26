@@ -3,7 +3,7 @@ import { createJobsCzCollector } from "../collectors/jobscz";
 import { createHttpClient } from "../collectors/jobscz/http";
 import { openDb } from "../db";
 import { createCachedFetch, type HttpMode } from "../http-cache";
-import { runCollectors } from "../pipeline";
+import { runCollectors, storedDetailError } from "../pipeline";
 import type { Collector, FetchText } from "../types";
 
 export const COLLECTORS: Record<string, (ctx: { fetchText: FetchText; limit: number | null; isKnown: (id: string) => boolean }) => Collector> = {
@@ -12,16 +12,6 @@ export const COLLECTORS: Record<string, (ctx: { fetchText: FetchText; limit: num
 };
 
 const keyOf = (source: string, sourceId: string): string => `${source}\0${sourceId}`;
-
-/** Stored detail failure worth refetching; og successes (`detailError: null`) and corrupt rows stay known. */
-const retryable = (rawJson: string): boolean => {
-  try {
-    const p: unknown = JSON.parse(rawJson);
-    return typeof p === "object" && p !== null && "detailError" in p && typeof p.detailError === "string" && p.detailError.length > 0;
-  } catch {
-    return false;
-  }
-};
 
 async function main(argv: string[]): Promise<void> {
   let sources: string[];
@@ -51,7 +41,7 @@ async function main(argv: string[]): Promise<void> {
   const db = openDb(process.env.DB_PATH || "data/jobs.db");
   try {
     const rows = db.query<{ source: string; source_id: string; raw_json: string }, []>("SELECT source, source_id, raw_json FROM offers").all();
-    const known = new Set(rows.filter((r) => !retryable(r.raw_json)).map((r) => keyOf(r.source, r.source_id)));
+    const known = new Set(rows.filter((r) => !storedDetailError(r.raw_json)).map((r) => keyOf(r.source, r.source_id)));
     const collectors = names.map((name) => COLLECTORS[name]!({ fetchText, limit, isKnown: (id) => known.has(keyOf(name, id)) }));
 
     const runs = await runCollectors(db, collectors);

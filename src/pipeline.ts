@@ -20,8 +20,8 @@ function hasDetailError(raw: unknown): boolean {
   return typeof err === "string" && err.length > 0;
 }
 
-/** Same check over a stored `raw_json` string; corrupt rows count as "no detail error". */
-function storedDetailError(rawJson: string): boolean {
+/** Stored detail failure worth refetching; og successes (`detailError: null`) and corrupt rows stay known. */
+export function storedDetailError(rawJson: string): boolean {
   try {
     return hasDetailError(JSON.parse(rawJson));
   } catch {
