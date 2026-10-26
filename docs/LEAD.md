@@ -7,8 +7,10 @@ Read this before dispatching any worker. The lead spawns and watches workers its
 
 | Who | Model | Fallback |
 |---|---|---|
-| Session (lead, reviewer, worker) | `opencode-go/muse-spark-1.3-contributor` | `anthropic/claude-sonnet-5-5` |
+| Worker session | `opencode-go/muse-spark-1.3-contributor` | `anthropic/claude-sonnet-5-5` |
 | Subagents (`task`, `scout`, `sonic`, `reviewer`, …) | `opencode-go/deepseek-v4.1-flash` | `anthropic/claude-haiku-5-5` |
+
+The two lead sessions (lead, creep reviewer) run Opus 5.5 by the user's decision and are not restarted; the policy above applies to workers only.
 
 - Do not pass `--model` to workers and do not switch models in a worker session.
 - The file applies only when omp starts in a directory that contains it. A worktree created from `main` has it. A directory outside the repo does not.
