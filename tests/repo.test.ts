@@ -89,8 +89,10 @@ describe("listOffers tabs", () => {
   });
 
   test("onlyNew, remote and olomouc filters", () => {
-    const fresh = offer({ labels: ["hpp"] });
-    const old = offer({ labels: ["hpp"], firstSeenAt: "2026-10-20T10:00:00.000Z" });
+    const hour = 60 * 60 * 1000;
+    const at = (agoMs: number): string => new Date(Date.now() - agoMs).toISOString();
+    const fresh = offer({ labels: ["hpp"], firstSeenAt: at(hour) });
+    const old = offer({ labels: ["hpp"], firstSeenAt: at(48 * hour) });
     const remote = offer({ workplace: "remote" });
     const remoteCz = offer({ labels: ["remote-cz"] });
     const olomouc = offer({ labels: ["olomouc"] });
