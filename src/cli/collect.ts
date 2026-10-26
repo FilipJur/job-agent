@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { createHnCollector } from "../collectors/hn";
 import { createJobsCzCollector } from "../collectors/jobscz";
 import { createHttpClient } from "../collectors/jobscz/http";
 import { openDb } from "../db";
@@ -8,6 +9,7 @@ import type { Collector, FetchText } from "../types";
 
 type Ctx = { fetchText: FetchText; limit: number | null; isKnown: (id: string) => boolean };
 export const COLLECTORS: Record<string, (ctx: Ctx) => Collector> = {
+  hn: ({ fetchText, limit }) => createHnCollector({ fetchText, limit }),
   jobscz: ({ fetchText, limit, isKnown }) =>
     createJobsCzCollector({
       fetchText,
