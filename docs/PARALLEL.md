@@ -13,14 +13,14 @@ Worktrees are for real concurrency only; a single worker does not need one.
 
 | Situation | Where the worker works |
 |---|---|
-| One worker, lead not editing the repo meanwhile (lead's prompts live outside the repo) | Main checkout, branch `<slice>-<task>` from `main` |
+| One worker, lead not editing tracked files meanwhile (prompts and reports in gitignored `.lead/` are fine) | Main checkout, branch `<slice>-<task>` from `main` |
 | Fix round for a branch that is not merged yet | Same place, same branch |
-| 2–4 workers at the same time, disjoint file sets | One worktree per worker, removed after merge |
+| 2–4 workers at the same time, disjoint file sets | One worktree per worker in `.worktrees/<task>`, removed after merge |
 | More than 4 at once | Don't: review cannot keep up |
 
 Commands (lead):
 - Single worker: `git switch -c <slice>-<task> main` in the main checkout; after merge `git switch main`.
-- Concurrent worker: `git worktree add ../job-agent-wt-<task> -b <slice>-<task> main`, then `bun install` and copy `.env` if needed.
+- Concurrent worker: `git worktree add .worktrees/<task> -b <slice>-<task> main`, then `bun install` in it and copy `.env` if needed. `.worktrees/` is gitignored, so `bun test`, `tsc` and `git status` in the main checkout ignore it.
 
 Reviewers only read (`git diff main...<branch>`, `git log`); no checkout, commit or edits.
 
@@ -40,7 +40,7 @@ Reviewers only read (`git diff main...<branch>`, `git log`); no checkout, commit
 ## Integration (lead only)
 1. Review each branch (`git diff main...<branch>`, run tests where it was built).
 2. Merge into `main` one branch at a time, fast-forward or `--no-ff`; run `bun test && bun run typecheck` on the merged result after each merge (each branch passing alone does not prove the merge works).
-3. Clean up: delete the merged branch (`git branch -d <slice>-<task>`) and its worktree if it had one (`git worktree remove ../job-agent-wt-<task>`).
+3. Clean up: delete the merged branch (`git branch -d <slice>-<task>`) and its worktree if it had one (`git worktree remove .worktrees/<task>`).
 4. Push `main` only after the user approves.
 
 ## When to parallelise
