@@ -29,6 +29,6 @@ Goals, scope, sources and roadmap: `docs/VISION.md`. Read it before starting a s
 
 ## Workflow
 - Work on the slice given in the task prompt only; do not start the next slice.
-- Work only in the worktree and branch named in the prompt; change only the files the prompt allows. Never merge, rebase, or touch `main`. Rules for parallel sessions: `docs/PARALLEL.md`.
+- Work only in the place (main checkout or worktree) and on the branch named in the prompt; change only the files the prompt allows. Never commit to, merge into, or rebase `main`. Rules for parallel sessions: `docs/PARALLEL.md`.
 - Commit locally in atomic commits. Never push.
 - Finish with a report: what changed (files), commands run with their real output, known gaps.
