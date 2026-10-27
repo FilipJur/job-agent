@@ -1,4 +1,4 @@
-import type { AgencyPatch, AgencyRow, AspirationRow, OfferRow, Tab, TriageQueue, Verdict } from "./types";
+import type { AgencyPatch, AgencyRow, AspirationRow, EvalSummary, OfferRow, Proposal, Tab, TriageQueue, Verdict } from "./types";
 
 export interface OfferFilters {
   onlyNew: boolean;
@@ -100,4 +100,44 @@ export async function saveProfile(text: string): Promise<ProfileStatus> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ text }),
   });
+}
+
+export type { EvalSummary, Proposal, ProposalStatus } from "./types";
+
+/**
+ * Pending proposal list for the Profil tab. Returns `null` when the backend
+ * worker is not merged yet (404): the panel renders nothing in that case.
+ */
+export async function fetchProposals(signal: AbortSignal): Promise<Proposal[] | null> {
+  const response = await fetch("/api/proposals", { signal });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await errorBody(response));
+  return (await response.json()) as Proposal[];
+}
+
+export async function applyProposal(id: string): Promise<void> {
+  await proposalAction(id, "apply");
+}
+
+export async function rejectProposal(id: string): Promise<void> {
+  await proposalAction(id, "reject");
+}
+
+async function proposalAction(id: string, action: "apply" | "reject"): Promise<void> {
+  const response = await fetch(`/api/proposals/${encodeURIComponent(id)}/${action}`, { method: "POST" });
+  if (response.ok) return;
+  throw new Error(await errorBody(response));
+}
+
+async function errorBody(response: Response): Promise<string> {
+  const text = await response.text();
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (parsed !== null && typeof parsed === "object" && "error" in parsed && typeof parsed.error === "string") {
+      return parsed.error;
+    }
+  } catch {
+    // Keep the status-based message for non-JSON error bodies.
+  }
+  return `HTTP ${response.status}`;
 }
