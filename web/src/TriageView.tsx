@@ -98,6 +98,18 @@ function TriageCard({ offer, chips, freeText, pending, draftOpen, onToggleChip, 
               {score.gaps}
             </p>
           )}
+          {score.verdict === "blocked" && (
+            <p className="max-w-[84ch] text-sm text-muted text-pretty">
+              <span className={`${tag} mr-[1ch] text-bad`}>skryto AI</span>
+              {score.blocker.length > 0 ? score.blocker : "model označil nabídku jako nepoužitelnou"}
+            </p>
+          )}
+          {score.verdict === "aspiration" && (
+            <p className="max-w-[84ch] text-sm text-muted text-pretty">
+              <span className={`${tag} mr-[1ch] text-signal`}>model: aspirace</span>
+              {score.direction}
+            </p>
+          )}
         </div>
       )}
 
@@ -183,11 +195,23 @@ interface HistoryEntry {
   offer: TriageOffer;
 }
 
-export function TriageView({ onError, onMissingFacts }: { onError: (message: string) => void; onMissingFacts: () => void }) {
+export function TriageView({
+  onError,
+  onMissingFacts,
+  onCounts,
+  reloadKey = 0,
+}: {
+  onError: (message: string) => void;
+  onMissingFacts: () => void;
+  onCounts?: (counts: { labeled: number; remaining: number }) => void;
+  reloadKey?: number;
+}) {
   const [queue, setQueue] = useState<TriageOffer[]>([]);
   const [labeled, setLabeled] = useState(0);
   const [remaining, setRemaining] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [pending, setPending] = useState(false);
   const [chips, setChips] = useState<string[]>([]);
   const [freeText, setFreeText] = useState("");
@@ -195,6 +219,8 @@ export function TriageView({ onError, onMissingFacts }: { onError: (message: str
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const seenIds = useRef(new Set<number>());
   const loadingRef = useRef(false);
+  const countsRef = useRef(onCounts);
+  countsRef.current = onCounts;
   const stateRef = useRef({ queue, labeled, remaining, history, chips, freeText, pending });
   stateRef.current = { queue, labeled, remaining, history, chips, freeText, pending };
 
@@ -210,8 +236,14 @@ export function TriageView({ onError, onMissingFacts }: { onError: (message: str
         setQueue((current) => [...current, ...fresh]);
         setLabeled(data.labeled);
         setRemaining(data.remaining);
+        setFailed(null);
+        countsRef.current?.({ labeled: data.labeled, remaining: data.remaining });
       } catch (cause) {
-        if (!signal.aborted) onError(`Načtení triáže selhalo: ${cause instanceof Error ? cause.message : String(cause)}`);
+        if (!signal.aborted) {
+          const message = `Načtení triáže selhalo: ${cause instanceof Error ? cause.message : String(cause)}`;
+          setFailed(message);
+          onError(message);
+        }
       } finally {
         loadingRef.current = false;
         if (!signal.aborted) setLoading(false);
@@ -227,10 +259,11 @@ export function TriageView({ onError, onMissingFacts }: { onError: (message: str
     setHistory([]);
     setChips([]);
     setFreeText("");
+    setFailed(null);
     setLoading(true);
     void load(20, controller.signal, seenIds.current);
     return () => controller.abort();
-  }, [load]);
+  }, [load, attempt, reloadKey]);
 
   // Prefetch while fewer than 5 cards remain locally.
   useEffect(() => {
@@ -251,7 +284,7 @@ export function TriageView({ onError, onMissingFacts }: { onError: (message: str
 
   const answer = useCallback(
     async (verdict: Verdict) => {
-      const { queue: q, chips: c, freeText: t } = stateRef.current;
+      const { queue: q, chips: c, freeText: t, labeled: wasLabeled, remaining: wasRemaining } = stateRef.current;
       const offer = q[0];
       if (offer === undefined || stateRef.current.pending) return;
       setPending(true);
@@ -262,6 +295,7 @@ export function TriageView({ onError, onMissingFacts }: { onError: (message: str
         await sendVerdict(offer.id, verdict, joinReason(c, t));
         setLabeled((n) => n + 1);
         setRemaining((n) => Math.max(0, n - 1));
+        countsRef.current?.({ labeled: wasLabeled + 1, remaining: Math.max(0, wasRemaining - 1) });
       } catch (cause) {
         // Put the card back on failure.
         setQueue((rest) => [offer, ...rest]);
@@ -282,7 +316,7 @@ export function TriageView({ onError, onMissingFacts }: { onError: (message: str
   }, []);
 
   const undo = useCallback(async () => {
-    const { history: h } = stateRef.current;
+    const { history: h, labeled: wasLabeled, remaining: wasRemaining } = stateRef.current;
     const last = h[h.length - 1];
     if (last === undefined || stateRef.current.pending) return;
     setPending(true);
@@ -292,13 +326,13 @@ export function TriageView({ onError, onMissingFacts }: { onError: (message: str
       setHistory(h.slice(0, -1));
       setLabeled((n) => Math.max(0, n - 1));
       setRemaining((n) => n + 1);
+      countsRef.current?.({ labeled: Math.max(0, wasLabeled - 1), remaining: wasRemaining + 1 });
     } catch (cause) {
       onError(`Vrácení verdiktu selhalo: ${cause instanceof Error ? cause.message : String(cause)}`);
     } finally {
       setPending(false);
     }
   }, [onError]);
-
   const toggleChip = useCallback((label: string) => {
     setChips((current) => (current.includes(label) ? current.filter((c) => c !== label) : [...current, label]));
   }, []);
@@ -340,9 +374,16 @@ export function TriageView({ onError, onMissingFacts }: { onError: (message: str
   return (
     <div>
       <p className="mb-4 text-sm text-muted tabular-nums" aria-live="polite">
-        {loading && queue.length === 0 ? "načítám…" : `označeno ${labeled} · zbývá ${remaining}`}
+        {loading && queue.length === 0 && failed === null ? "načítám…" : `označeno ${labeled} · zbývá ${remaining}`}
       </p>
-      {current !== null ? (
+      {failed !== null && queue.length === 0 ? (
+        <p className="py-10 text-muted" role="alert">
+          {failed}{" "}
+          <button type="button" className={linkButton} onClick={() => { setFailed(null); setLoading(true); setAttempt((n) => n + 1); }}>
+            [zkusit znovu]
+          </button>
+        </p>
+      ) : current !== null ? (
         <TriageCard
           offer={current}
           chips={chips}
