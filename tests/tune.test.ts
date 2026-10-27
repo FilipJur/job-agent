@@ -127,6 +127,19 @@ describe("generateProposal", () => {
     expect((await run(api.postJson)).kind).toBe("not-enough-labels");
     expect(api.calls()).toBe(0);
     expect(existsSync(process.env.PROPOSALS_DIR!)).toBe(false);
+    expect(isTuneDue(Date.parse("2026-10-27T10:00:00.000Z"))).toBe(true);
+  });
+
+  test("a run past the label check marks the attempt even when the API fails", async () => {
+    labelSet(6, 6);
+    const failing: PostJson = async () => {
+      throw new Error("boom");
+    };
+    await expect(run(failing)).rejects.toThrow("boom");
+    expect(isTuneDue(Date.parse("2026-10-27T10:00:00.000Z"))).toBe(false);
+    expect(JSON.parse(readFileSync(join(process.env.PROPOSALS_DIR!, "last-attempt.json"), "utf8"))).toEqual({
+      at: "2026-10-27T10:00:00.000Z",
+    });
   });
 
   test.each([
@@ -138,7 +151,7 @@ describe("generateProposal", () => {
     if (result.kind !== "created") throw new Error(result.kind);
     expect(result.proposal.status).toBe(status);
     expect(JSON.parse(readFileSync(result.path, "utf8")).status).toBe(status);
-    expect(readdirSync(process.env.PROPOSALS_DIR!)).toEqual(["2026-10-27T10-00-00Z.json"]);
+    expect(readdirSync(process.env.PROPOSALS_DIR!).filter((f) => f !== "last-attempt.json")).toEqual(["2026-10-27T10-00-00Z.json"]);
   });
 
   test("hold-out: the prompt shows training scores and disagreements, never held-out ids", async () => {

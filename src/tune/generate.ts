@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { labeledOffers, type EvalLabel, type LabeledOffer } from "../eval/labels";
 import { replayLabeled, type ReplayOptions, type ReplayResult } from "../eval/replay";
 import { defaultPostJson, type PostJson } from "../scoring/client";
-import { proposalIdOf, saveProposal, summarize, type EvalSummary, type StoredProposal } from "./proposals";
+import { markTuneAttempt, proposalIdOf, saveProposal, summarize, type EvalSummary, type StoredProposal } from "./proposals";
 
 export const MIN_LABELS = 10;
 export const MIN_PER_CLASS = 3;
@@ -130,6 +130,7 @@ export async function generateProposal(db: Database, opts: GenerateOptions): Pro
         `need ${minLabels} with at least ${MIN_PER_CLASS} of each`,
     };
   }
+  markTuneAttempt((opts.now ?? (() => new Date()))().getTime());
 
   const postJson = opts.postJson ?? defaultPostJson;
   const replayOpts = (profile: string): ReplayOptions => ({
