@@ -1,3 +1,4 @@
+import type { OfferFilters } from "./api";
 import type { OfferRow } from "./types";
 
 export type SortKey = "score" | "newest";
@@ -15,9 +16,14 @@ export const NO_CLIENT_FILTERS: ClientFilters = { labels: [], minScore: 0, sourc
 
 export const MIN_SCORES = [0, 5, 7, 9] as const;
 
-export function clientFiltersActive(filters: ClientFilters): boolean {
+/** Number of active filters, counting each selected label separately. */
+export function activeFilterCount(filters: ClientFilters, server: OfferFilters): number {
   return (
-    filters.labels.length > 0 || filters.minScore > 0 || filters.source !== "" || filters.query.trim() !== ""
+    filters.labels.length +
+    Object.values(server).filter(Boolean).length +
+    (filters.minScore > 0 ? 1 : 0) +
+    (filters.source !== "" ? 1 : 0) +
+    (filters.query.trim() !== "" ? 1 : 0)
   );
 }
 

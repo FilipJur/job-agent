@@ -1,22 +1,21 @@
-import { motion } from "motion/react";
 import { useState } from "react";
 import type { OfferFilters } from "./api";
-import { clientFiltersActive, labelCounts, MIN_SCORES, sourceCounts } from "./filters";
+import { activeFilterCount, labelCounts, MIN_SCORES, sourceCounts } from "./filters";
 import type { ClientFilters, SortKey } from "./filters";
 import { offerRatio } from "./format";
-import { control, fieldLabel, linkButton, token } from "./ui";
+import { checkbox, control, fieldLabel, linkButton, radio, selectControl, selectWrap } from "./ui";
 import type { OfferRow } from "./types";
 
 const SERVER_TOGGLES: { key: keyof OfferFilters; label: string }[] = [
-  { key: "onlyNew", label: "Nové (24h)" },
-  { key: "remote", label: "Remote" },
-  { key: "olomouc", label: "Olomouc" },
-  { key: "hidden", label: "Skryté" },
+  { key: "onlyNew", label: "nové (24h)" },
+  { key: "remote", label: "remote" },
+  { key: "olomouc", label: "olomouc" },
+  { key: "hidden", label: "skryté" },
 ];
 
 const SORTS: { key: SortKey; label: string }[] = [
-  { key: "score", label: "Podle skóre" },
-  { key: "newest", label: "Nejnovější" },
+  { key: "score", label: "podle skóre" },
+  { key: "newest", label: "nejnovější" },
 ];
 
 interface OfferFilterBarProps {
@@ -42,13 +41,7 @@ export function OfferFilterBar({
   const [open, setOpen] = useState(false);
   const labels = labelCounts(offers, filters);
   const sources = sourceCounts(offers);
-  const activeCount =
-    filters.labels.length +
-    Object.values(serverFilters).filter(Boolean).length +
-    (filters.minScore > 0 ? 1 : 0) +
-    (filters.source !== "" ? 1 : 0) +
-    (filters.query.trim() !== "" ? 1 : 0);
-  const anyActive = clientFiltersActive(filters) || Object.values(serverFilters).some(Boolean);
+  const activeCount = activeFilterCount(filters, serverFilters);
 
   const toggleLabel = (label: string) => {
     const next = filters.labels.includes(label)
@@ -58,67 +51,71 @@ export function OfferFilterBar({
   };
 
   return (
-    <section className="mb-2 border-b border-line pb-3" aria-label="Filtry nabídek">
+    <fieldset className="mb-5 border border-line px-3 pt-0 pb-3 sm:px-4" aria-label="Filtry nabídek">
+      <legend className="text-xs text-faint">filtry{activeCount > 0 ? ` · ${activeCount}` : ""}</legend>
+
       <div className="flex items-center justify-between gap-3 sm:hidden">
-        <button type="button" className={`${control} font-medium`} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-          Filtry{activeCount > 0 ? ` · ${activeCount}` : ""}
+        <button type="button" className={`${control} text-sm`} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+          {open ? "[-] skrýt filtry" : "[+] zobrazit filtry"}
         </button>
-        <span className="flex items-baseline gap-3">
-          <span className="font-mono text-xs text-muted tabular-nums">{offerRatio(shown, offers.length)}</span>
-          {anyActive && (
-            <button type="button" className={`${linkButton} !text-xs`} onClick={onReset}>
-              Zrušit
-            </button>
-          )}
-        </span>
+        <span className="text-xs text-muted tabular-nums">{offerRatio(shown, offers.length)}</span>
       </div>
 
-      <div className={`${open ? "grid" : "hidden"} gap-x-4 gap-y-2.5 pt-3 sm:grid sm:pt-0 sm:grid-cols-[4.5rem_1fr] sm:items-center`}>
-        <span className={`${fieldLabel} hidden sm:block`}>Hledat</span>
+      <div className={`${open ? "grid" : "hidden"} gap-x-4 gap-y-2 pt-3 sm:grid sm:grid-cols-[7ch_1fr] sm:items-center sm:pt-2`}>
+        <span className={`${fieldLabel} hidden sm:block`}>hledat</span>
         <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="search"
-            className={`${control} min-w-48 flex-1 placeholder:text-faint`}
-            placeholder="název, firma, důvod…  ( / )"
-            aria-label="Hledat v nabídkách"
-            data-search
-            value={filters.query}
-            onChange={(event) => onChange({ ...filters, query: event.currentTarget.value })}
-          />
-          <select
-            className={control}
-            aria-label="Zdroj"
-            value={filters.source}
-            onChange={(event) => onChange({ ...filters, source: event.currentTarget.value })}
-          >
-            <option value="">Všechny zdroje</option>
-            {sources.map(({ source, count }) => (
-              <option key={source} value={source}>
-                {source} ({count})
-              </option>
-            ))}
-          </select>
-          <select
-            className={control}
-            aria-label="Řazení"
-            value={filters.sort}
-            onChange={(event) => onChange({ ...filters, sort: event.currentTarget.value as SortKey })}
-          >
-            {SORTS.map((sort) => (
-              <option key={sort.key} value={sort.key}>
-                {sort.label}
-              </option>
-            ))}
-          </select>
+          <label className={`${control} flex min-w-48 flex-1 items-center gap-2 focus-within:border-signal`}>
+            <span className="text-signal" aria-hidden="true">
+              &gt;
+            </span>
+            <input
+              type="search"
+              className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-faint [&::-webkit-search-cancel-button]:hidden"
+              placeholder="název, firma, důvod   ( / )"
+              aria-label="Hledat v nabídkách"
+              data-search
+              value={filters.query}
+              onChange={(event) => onChange({ ...filters, query: event.currentTarget.value })}
+            />
+          </label>
+          <span className={selectWrap}>
+            <select
+              className={`${control} ${selectControl}`}
+              aria-label="Zdroj"
+              value={filters.source}
+              onChange={(event) => onChange({ ...filters, source: event.currentTarget.value })}
+            >
+              <option value="">všechny zdroje</option>
+              {sources.map(({ source, count }) => (
+                <option key={source} value={source}>
+                  {source} ({count})
+                </option>
+              ))}
+            </select>
+          </span>
+          <span className={selectWrap}>
+            <select
+              className={`${control} ${selectControl}`}
+              aria-label="Řazení"
+              value={filters.sort}
+              onChange={(event) => onChange({ ...filters, sort: event.currentTarget.value as SortKey })}
+            >
+              {SORTS.map((sort) => (
+                <option key={sort.key} value={sort.key}>
+                  {sort.label}
+                </option>
+              ))}
+            </select>
+          </span>
         </div>
 
-        <span className={`${fieldLabel} hidden sm:block`}>Skóre od</span>
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Minimální skóre">
+        <span className={`${fieldLabel} hidden sm:block`}>skóre od</span>
+        <div className="flex flex-wrap items-center gap-x-4" role="group" aria-label="Minimální skóre">
           {MIN_SCORES.map((min) => (
             <button
               key={min}
               type="button"
-              className={`${token} relative font-mono tabular-nums`}
+              className={`${radio} rb tabular-nums`}
               aria-pressed={filters.minScore === min}
               onClick={() => onChange({ ...filters, minScore: min })}
             >
@@ -127,13 +124,13 @@ export function OfferFilterBar({
           ))}
         </div>
 
-        <span className={`${fieldLabel} hidden sm:block`}>Zobrazit</span>
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Rychlé filtry">
+        <span className={`${fieldLabel} hidden sm:block`}>zobrazit</span>
+        <div className="flex flex-wrap items-center gap-x-4" role="group" aria-label="Rychlé filtry">
           {SERVER_TOGGLES.map(({ key, label }) => (
             <button
               key={key}
               type="button"
-              className={token}
+              className={`${checkbox} cb`}
               aria-pressed={serverFilters[key]}
               onClick={() => onServerToggle(key)}
             >
@@ -144,20 +141,18 @@ export function OfferFilterBar({
 
         {labels.length > 0 && (
           <>
-            <span className={`${fieldLabel} hidden self-start pt-1 sm:block`}>Štítky</span>
-            <ul className="flex flex-wrap gap-x-0.5 gap-y-1" aria-label="Štítky (všechny vybrané musí platit)">
+            <span className={`${fieldLabel} hidden self-start sm:block`}>štítky</span>
+            <ul className="flex flex-wrap gap-x-4" aria-label="Štítky (všechny vybrané musí platit)">
               {labels.map(({ label, count, selected }) => (
                 <li key={label}>
-                  <motion.button
+                  <button
                     type="button"
-                    className={`${token} inline-flex items-baseline gap-1.5 font-mono !text-[0.8125rem] ${count === 0 && !selected ? "opacity-35" : ""}`}
+                    className={`${checkbox} cb ${count === 0 && !selected ? "opacity-35" : ""}`}
                     aria-pressed={selected}
-                    whileTap={{ scale: 0.96 }}
                     onClick={() => toggleLabel(label)}
                   >
-                    {label}
-                    <span className={selected ? "text-bg/60 tabular-nums" : "text-faint tabular-nums"}>{count}</span>
-                  </motion.button>
+                    {label} <span className="text-faint tabular-nums">{count}</span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -165,14 +160,14 @@ export function OfferFilterBar({
         )}
       </div>
 
-      <p className="mt-3 hidden items-center gap-3 text-sm text-muted sm:flex" aria-live="polite">
-        <span className="font-mono tabular-nums">{offerRatio(shown, offers.length)}</span>
-        {anyActive && (
+      <p className="mt-3 flex items-center gap-4 text-sm text-muted" aria-live="polite">
+        <span className="hidden tabular-nums sm:inline">{offerRatio(shown, offers.length)}</span>
+        {activeCount > 0 && (
           <button type="button" className={linkButton} onClick={onReset}>
-            Zrušit filtry
+            zrušit filtry
           </button>
         )}
       </p>
-    </section>
+    </fieldset>
   );
 }

@@ -13,10 +13,10 @@ interface FeedbackAction {
 }
 
 const ACTIONS: FeedbackAction[] = [
-  { verdict: "up", label: "Hodí se", title: "Dobrá nabídka", key: "u" },
-  { verdict: "down", label: "Nehodí se", title: "Špatná nabídka", key: "d" },
-  { verdict: "responded", label: "Odpověděl", title: "Odpověděli", key: "r" },
-  { verdict: "hidden", label: "Skrýt", title: "Skrýt nabídku", key: "h" },
+  { verdict: "up", label: "hodí se", title: "Dobrá nabídka", key: "u" },
+  { verdict: "down", label: "nehodí se", title: "Špatná nabídka", key: "d" },
+  { verdict: "responded", label: "odpověděl", title: "Odpověděli", key: "r" },
+  { verdict: "hidden", label: "skrýt", title: "Skrýt nabídku", key: "h" },
 ];
 
 const VERDICT_TAGS: Partial<Record<Verdict, { text: string; className: string }>> = {
@@ -27,88 +27,97 @@ const VERDICT_TAGS: Partial<Record<Verdict, { text: string; className: string }>
 };
 
 const rowVariants = {
-  hidden: { opacity: 0, y: 6 },
-  show: (index: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] as const, delay: Math.min(index, 8) * 0.025 },
-  }),
-  exit: { opacity: 0, transition: { duration: 0.12 } },
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { duration: 0.12 } },
+  exit: { opacity: 0, transition: { duration: 0.08 } },
 };
+
+/** Ten-cell gauge drawn with box characters: heavy line = score on the ramp colour, light line = dim rail. */
+function ScoreBar({ score }: { score: number | undefined }) {
+  const filled = score ?? 0;
+  return (
+    <span
+      className="inline-flex shrink-0 gap-[1ch] whitespace-pre tabular-nums"
+      style={score === undefined ? undefined : ({ "--s": score } as CSSProperties)}
+      role="img"
+      aria-label={score === undefined ? "Nehodnoceno" : `Skóre ${score} z 10`}
+    >
+      <span className={score === undefined ? "text-faint" : "score-ink font-semibold"}>
+        {score === undefined ? "--" : String(score).padStart(2, "0")}
+      </span>
+      <span aria-hidden="true">
+        <span className="score-ink">{"━".repeat(filled)}</span>
+        <span className="text-line">{"─".repeat(10 - filled)}</span>
+      </span>
+    </span>
+  );
+}
 
 interface OfferRowProps {
   offer: OfferRow;
-  index: number;
   selected: boolean;
   pending: boolean;
   onSelect: (id: number) => void;
   onFeedback: (offer: OfferRow, verdict: Verdict) => void;
 }
 
-function OfferItem({ offer, index, selected, pending, onSelect, onFeedback }: OfferRowProps) {
+function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowProps) {
   const salary = formatSalary(offer);
   const score = offer.score;
   const verdictTag = offer.feedback ? VERDICT_TAGS[offer.feedback.verdict] : undefined;
   return (
     <motion.article
-      className="group/row relative grid grid-cols-[2.5rem_1fr] gap-x-3 border-b border-line py-4 pr-2 pl-3 transition-colors before:absolute before:top-3 before:bottom-3 before:left-0 before:w-0.5 before:origin-center before:scale-y-0 before:bg-signal before:transition-transform hover:bg-surface/60 data-[selected=true]:bg-surface data-[selected=true]:before:scale-y-100 @xl:grid-cols-[3rem_1fr_9rem] @xl:gap-x-5"
+      className="group/row relative grid grid-cols-[2ch_1fr] gap-x-[1ch] border-b border-line py-3 pr-1 transition-colors before:text-signal before:content-[''] hover:bg-surface data-[selected=true]:bg-raised data-[selected=true]:before:content-['>']"
       data-selected={selected}
       data-offer-id={offer.id}
       layout="position"
-      custom={index}
       variants={rowVariants}
       initial="hidden"
       animate="show"
       exit="exit"
+      transition={{ layout: { duration: 0.12 } }}
       onClick={(event) => {
         if (!(event.target as HTMLElement).closest("a,button")) onSelect(offer.id);
       }}
     >
-      <div
-        className="grid content-start justify-items-start gap-1.5 pt-px"
-        style={score ? ({ "--s": score.score } as CSSProperties) : undefined}
-        role="img"
-        aria-label={score ? `Skóre ${score.score} z 10` : "Nehodnoceno"}
-      >
-        <span className={`trim font-mono text-2xl leading-none font-medium tabular-nums ${score ? "score-ink" : "text-faint"}`}>
-          {score ? score.score : "–"}
-        </span>
-        <span className="relative h-[3px] w-8 bg-line">
-          {score && <span className="score-fill absolute inset-y-0 left-0" style={{ width: `calc(var(--s) * 10%)` }} />}
-        </span>
-      </div>
-
-      <div className="grid min-w-0 gap-1.5">
-        <h2 className="text-base leading-snug font-semibold text-balance">
-          <a
-            className="text-fg no-underline decoration-signal hover:underline"
-            href={offer.url}
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            {offer.title}
-          </a>
-        </h2>
+      <div className="grid min-w-0 gap-1 col-start-2">
+        <div className="flex flex-wrap items-baseline gap-x-[2ch] gap-y-0.5">
+          <ScoreBar score={score?.score} />
+          <h2 className="min-w-[20ch] flex-1 text-base leading-snug font-semibold text-balance">
+            <a
+              className="text-fg no-underline decoration-signal hover:underline"
+              href={offer.url}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              {offer.title}
+            </a>
+          </h2>
+        </div>
 
         <p className={meta}>
-          {offer.company !== null && <span className="font-medium text-fg">{offer.company}</span>}
+          {offer.company !== null && <span className="text-fg">{offer.company}</span>}
           <span>{offer.city ?? "bez města"}</span>
           <span>{WORKPLACE_LABELS[offer.workplace]}</span>
-          {salary !== null && <span className="font-mono text-[0.8125rem] text-fg/80">{salary}</span>}
-          {offer.partial && <span className="text-signal">neúplný inzerát</span>}
+          {salary !== null && <span className="text-fg/80">{salary}</span>}
+          <span className="text-faint">{offer.source}</span>
+          <span className="text-faint" title={formatDateTime(offer.firstSeenAt)}>
+            {formatDate(offer.firstSeenAt)}
+          </span>
+          {offer.partial && <span className="text-bad">neúplný inzerát</span>}
           {verdictTag && <span className={verdictTag.className}>{verdictTag.text}</span>}
         </p>
 
-        {score !== null && score.reason.length > 0 && <p className="max-w-prose text-[0.9375rem] text-fg/85 text-pretty">{score.reason}</p>}
+        {score !== null && score.reason.length > 0 && <p className="max-w-[84ch] text-fg/90 text-pretty">{score.reason}</p>}
         {score !== null && score.gaps.length > 0 && (
-          <p className="max-w-prose text-sm text-muted text-pretty">
+          <p className="max-w-[84ch] text-sm text-muted text-pretty">
             <span className="text-faint">chybí: </span>
             {score.gaps}
           </p>
         )}
 
         {offer.labels.length > 0 && (
-          <ul className="flex flex-wrap gap-x-2.5 font-mono text-xs text-faint" aria-label="Štítky">
+          <ul className="flex flex-wrap gap-x-[1.5ch] text-xs text-faint" aria-label="Štítky">
             {offer.labels.map((label) => (
               <li key={label}>{label}</li>
             ))}
@@ -116,11 +125,11 @@ function OfferItem({ offer, index, selected, pending, onSelect, onFeedback }: Of
         )}
 
         {offer.feedback?.reason != null && offer.feedback.reason.length > 0 && (
-          <p className="text-sm text-muted">Poznámka: {offer.feedback.reason}</p>
+          <p className="text-sm text-muted">poznámka: {offer.feedback.reason}</p>
         )}
 
         <div
-          className="-ml-1.5 flex flex-wrap gap-0.5 pt-1 transition-opacity @xl:absolute @xl:right-2 @xl:bottom-2.5 @xl:ml-0 @xl:bg-surface @xl:pt-0 @xl:[@media(hover:hover)_and_(pointer:fine)]:opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 group-data-[selected=true]/row:opacity-100"
+          className="flex flex-wrap gap-x-[2ch] pt-1 transition-opacity @xl:absolute @xl:right-1 @xl:bottom-2 @xl:bg-raised @xl:pl-2 @xl:pt-0 @xl:[@media(hover:hover)_and_(pointer:fine)]:opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 group-data-[selected=true]/row:opacity-100"
           role="group"
           aria-label="Reakce na nabídku"
         >
@@ -130,25 +139,19 @@ function OfferItem({ offer, index, selected, pending, onSelect, onFeedback }: Of
               <button
                 key={action.verdict}
                 type="button"
-                className="inline-flex items-baseline gap-1.5 rounded-sm px-1.5 py-1 text-sm text-muted transition-colors hover:bg-raised hover:text-fg disabled:opacity-50 aria-pressed:bg-fg aria-pressed:text-bg"
+                className="text-sm text-muted transition-colors hover:text-signal disabled:opacity-50 aria-pressed:bg-signal aria-pressed:text-bg"
                 aria-pressed={active}
                 aria-label={action.title}
                 title={`${action.title} (${action.key})`}
                 disabled={pending}
                 onClick={() => onFeedback(offer, action.verdict)}
               >
-                {action.label}
-                {selected && <kbd className="hidden font-mono text-[0.6875rem] text-faint [@media(hover:hover)_and_(pointer:fine)]:inline">{action.key}</kbd>}
+                <span className={active ? "" : "text-faint"}>[{action.key}]</span> {action.label}
               </button>
             );
           })}
         </div>
       </div>
-
-      <p className="col-start-2 mt-1 flex gap-2 font-mono text-xs text-faint @xl:col-start-3 @xl:row-start-1 @xl:mt-0 @xl:grid @xl:content-start @xl:justify-items-end @xl:gap-0.5 @xl:text-right">
-        <span>{offer.source}</span>
-        <span title={formatDateTime(offer.firstSeenAt)}>{formatDate(offer.firstSeenAt)}</span>
-      </p>
     </motion.article>
   );
 }
@@ -221,13 +224,12 @@ export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset
 
   return (
     <>
-      <div className="relative @container">
+      <div className="relative border-t border-line @container">
         <AnimatePresence mode="popLayout" initial>
-          {offers.map((offer, index) => (
+          {offers.map((offer) => (
             <OfferItem
               key={offer.id}
               offer={offer}
-              index={index}
               selected={offer.id === selectedId}
               pending={pendingId === offer.id}
               onSelect={setSelectedId}
@@ -237,14 +239,14 @@ export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset
         </AnimatePresence>
       </div>
       {offers.length === 0 && (
-        <div className="grid max-w-md gap-2 py-12 text-muted">
+        <div className="grid max-w-[60ch] gap-2 py-10 text-muted">
           {totalLoaded === 0 ? (
-            <p>Tady zatím nic není. Nabídky se objeví po dalším běhu <code className="font-mono text-fg">collect</code>.</p>
+            <p>$ ls nabídky/ <br />(prázdné) Nabídky se objeví po dalším běhu <code className="text-fg">collect</code>.</p>
           ) : (
             <>
-              <p>Tahle kombinace filtrů nic nenašla. Zkus ubrat štítek nebo snížit minimální skóre.</p>
+              <p>0 výsledků. Zkus ubrat štítek nebo snížit minimální skóre.</p>
               <button type="button" className={`${linkButton} justify-self-start`} onClick={onReset}>
-                Zrušit filtry
+                zrušit filtry
               </button>
             </>
           )}

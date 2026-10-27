@@ -1,65 +1,86 @@
-@import "@fontsource-variable/schibsted-grotesk";
-@import "@fontsource-variable/spline-sans-mono";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
 @import "tailwindcss";
 
 /*
- * DESIGN RULES (this is a triage tool, not a showcase)
- * - Rows, not cards: hairlines separate offers; no boxed panels inside boxed panels.
- * - One signal colour (vermilion) for what needs action; everything else is graphite.
- * - Score is encoded on ONE sequential ramp (grey -> signal), never a red/amber/green traffic light.
- * - Radius <= 4px. No gradients, glows, grain, shadows. No serif, no uppercase letter-spaced labels.
- * - Tight inside a group (4px), loose between groups (16-24px).
- * - Numbers are tabular mono; prose is the grotesque.
+ * DESIGN RULES: cold, sterile terminal. Test for every element: "would a real terminal do this?"
+ * - One monospace face everywhere; the page is a character grid (ch / lh), not a pixel layout.
+ * - Structure from lines and characters: 1px rules, fieldset legends cut into frames, [x] / (•) controls,
+ *   block-character score bars, inverse video for the active thing. Corners are square: radius 0.
+ * - No gradients, shadows, glow, scanlines, grain, icons, emoji, or decorative loops. No green phosphor nostalgia.
+ * - Cold palette on blue-black: grey-blue text, one ice-cyan signal for selection and action.
+ * - Motion is instant or near-instant (<= 120 ms), opacity only. Terminals do not slide.
  */
 @theme {
-  /* Graphite, tinted a hair toward blue so greys do not read as dead. */
-  --color-bg: oklch(0.16 0.008 255);
-  --color-surface: oklch(0.195 0.009 255);
-  --color-raised: oklch(0.235 0.01 255);
-  --color-line: oklch(0.28 0.01 255);
-  --color-line-strong: oklch(from var(--color-line) calc(l + 0.1) c h);
-  --color-fg: oklch(0.95 0.004 255);
-  --color-muted: oklch(0.7 0.012 255);
-  --color-faint: oklch(0.52 0.012 255);
-  --color-signal: oklch(0.74 0.17 48);
-  --color-ok: oklch(0.78 0.12 165);
-  --color-bad: oklch(0.7 0.16 25);
+  --color-bg: oklch(0.14 0.012 250);
+  --color-surface: oklch(0.175 0.014 250);
+  --color-raised: oklch(0.215 0.016 250);
+  --color-line: oklch(0.33 0.025 250);
+  --color-line-strong: oklch(from var(--color-line) calc(l + 0.14) c h);
+  --color-fg: oklch(0.92 0.012 235);
+  --color-muted: oklch(0.7 0.02 245);
+  --color-faint: oklch(0.54 0.025 250);
+  --color-signal: oklch(0.86 0.1 215);
+  --color-ok: oklch(0.82 0.11 170);
+  --color-bad: oklch(0.72 0.15 20);
 
-  --font-sans: "Schibsted Grotesk Variable", system-ui, sans-serif;
-  --font-mono: "Spline Sans Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  --radius-sm: 3px;
-  --radius-md: 4px;
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
 }
 
-/* Score 0-10 (set as --s on the element) mapped onto one ramp: low = muted grey, high = signal. */
+/* Score 0-10 (--s on the element) on one ramp: faint blue-grey -> ice. */
 @utility score-ink {
   color: color-mix(in oklch, var(--color-faint), var(--color-signal) calc(var(--s) * 10%));
 }
 
-@utility score-fill {
-  background: color-mix(in oklch, var(--color-faint), var(--color-signal) calc(var(--s) * 10%));
+/* Multi-select, TUI style: "[ ] label" / "[x] label", driven by aria-pressed. */
+@utility cb {
+  &::before {
+    content: "[ ] ";
+    white-space: pre;
+    color: var(--color-faint);
+  }
+  &[aria-pressed="true"]::before {
+    content: "[x] ";
+    color: var(--color-signal);
+  }
 }
 
-/** Trims font leading so numerals and button labels are optically centred. */
-@utility trim {
-  text-box: trim-both cap alphabetic;
+/* Single-select: "( ) label" / "(•) label". */
+@utility rb {
+  &::before {
+    content: "( ) ";
+    white-space: pre;
+    color: var(--color-faint);
+  }
+  &[aria-pressed="true"]::before {
+    content: "(•) ";
+    color: var(--color-signal);
+  }
 }
 
 @layer base {
   html {
     color-scheme: dark;
+    font-size: 14px;
     -webkit-text-size-adjust: 100%;
   }
 
   body {
     @apply bg-bg font-sans text-fg antialiased;
     min-height: 100dvh;
-    font-feature-settings: "ss01", "cv11";
+    line-height: 1.5;
+    font-variant-ligatures: none;
   }
 
   a {
-    @apply text-fg underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-signal;
+    @apply text-fg underline decoration-line-strong underline-offset-4 transition-colors hover:text-signal hover:decoration-signal;
   }
 
   button {
@@ -70,29 +91,21 @@
     @apply cursor-not-allowed;
   }
 
+  fieldset {
+    min-inline-size: 0;
+  }
+
+  legend {
+    @apply px-1.5;
+  }
+
   :focus-visible {
-    outline: 2px solid var(--color-signal);
+    outline: 1px solid var(--color-signal);
     outline-offset: 2px;
-    border-radius: var(--radius-sm);
   }
 
   ::selection {
-    background: oklch(from var(--color-signal) l c h / 0.35);
-  }
-
-  /* The header rule fades in only once the page scrolls (scroll-driven, no JS). */
-  @supports (animation-timeline: scroll()) {
-    .scroll-rule {
-      border-bottom-color: transparent;
-      animation: rule-in linear both;
-      animation-timeline: scroll();
-      animation-range: 0 48px;
-    }
-  }
-
-  @keyframes rule-in {
-    to {
-      border-bottom-color: var(--color-line);
-    }
+    background: var(--color-signal);
+    color: var(--color-bg);
   }
 }
