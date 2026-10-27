@@ -5,6 +5,8 @@ modelRoles:
   default: opencode-go/muse-spark-1.3-contributor
   task: opencode-go/deepseek-v4.1-flash
   smol: opencode-go/deepseek-v4.1-flash
+  # The global vision role is an OpenCode Go model outside the allowed pair (muse spark, deepseek flash).
+  vision: anthropic/claude-sonnet-5-5
 retry:
   modelFallback: true
   fallbackChains:
