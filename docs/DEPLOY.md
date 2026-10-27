@@ -47,6 +47,16 @@ docker compose logs -f web
 
 The scoring profile is user data in `data/profile.md`. On first use it is created from the committed template `profile.md`. Edit it in the Profil tab or with any editor; no rebuild needed.
 
+### Profile proposals
+
+From your Triáž verdicts the system proposes a revised profile, but never changes `data/profile.md` itself. `daily` generates a proposal at most once per 7 days, and only with at least 10 labelled offers (≥ 3 up/responded and ≥ 3 down/hidden). Each proposal re-scores the labelled offers under the old and the new profile; one that lowers AUC or precision@5 is stored as `discarded`. Proposals are files in `data/proposals/`.
+
+```sh
+docker compose run --rm cli tune     # generate a proposal now, prints the metrics, old vs new
+```
+
+Applying happens only in the Profil tab (`POST /api/proposals/:id/apply`); a proposal is refused when the profile was edited after it was made.
+
 ## Access
 
 - This Mac: `http://localhost:3000`
