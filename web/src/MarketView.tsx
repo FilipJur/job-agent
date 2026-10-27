@@ -138,12 +138,14 @@ function LeverageSection({ leverage }: { leverage: SkillStat[] }) {
         {leverage.map((row) => (
           <li key={row.skill} className="flex flex-wrap items-center gap-x-[2ch] gap-y-1">
             <span className="w-[14ch] shrink-0 text-sm font-medium">{row.skill}</span>
-            <span
-              className="h-[10px] min-w-[2px] flex-1 basis-24 bg-signal/70"
-              style={{ width: `${((row.leverage / top) * 100).toFixed(1)}%`, flexGrow: 0 }}
-              role="img"
-              aria-label={`${row.skill}: leverage ${row.leverage}`}
-            />
+            <span className="h-[10px] min-w-[2px] flex-1 basis-24">
+              <span
+                className="block h-full bg-signal/70"
+                style={{ width: `${((row.leverage / top) * 100).toFixed(1)}%`, minWidth: "2px" }}
+                role="img"
+                aria-label={`${row.skill}: leverage ${row.leverage}`}
+              />
+            </span>
             <span className="text-sm text-muted tabular-nums">
               {row.leverage}× · v mezerách u {row.gapMentions} téměř-vhodných nabídek
             </span>
