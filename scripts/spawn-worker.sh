@@ -1,7 +1,8 @@
 #!/bin/sh
 # Open an omp worker session in a Ghostty pane. Usage: scripts/spawn-worker.sh <dir> <prompt-file> [model]
 # The first worker opens a new "workers" window; later ones split it (right, down, right). Max 4.
-# [model] overrides the project policy only when the user asks for a specific model (docs/LEAD.md).
+# [model] defaults to the `worker` role from .omp/config.yml (the session default is the lead's Opus);
+# pass `ui` for the UI role, or a concrete model only when the user asks for one (docs/LEAD.md).
 # Task id = prompt file name without .md. Deletes a stale report for that id and writes the run record
 # .lead/runs/<task>.env read by scripts/watch-workers.sh and scripts/audit-worker.ts.
 # Prints the pane's terminal id. Docs: docs/LEAD.md.
@@ -25,8 +26,14 @@ branch=$(sed -n 's/.*branch `\([^`]*\)`.*/\1/p' "$prompt" | head -n 1)
 rm -f "$report"
 mkdir -p "$repo/.lead/runs" "$repo/.lead/reports"
 state="${TMPDIR:-/tmp}/job-agent-workers-window"
-model_flag=""
-[ $# -eq 3 ] && model_flag="--model=$3 "
+# Tier 2 model: a role name (worker/ui) resolves through modelRoles in the worker's directory.
+model=${3:-worker}
+case "$model" in
+  */*) ;;
+  *) model=$(cd "$dir" && omp config get modelRoles | bun -e "console.log(JSON.parse(await Bun.stdin.text())['$model'] ?? '')") ;;
+esac
+[ -n "$model" ] || { echo "no model for role ${3:-worker} in modelRoles" >&2; exit 2; }
+model_flag="--model=$model "
 window=$(cat "$state" 2>/dev/null || true)
 spawned_at=$(date +%s)
 
@@ -66,7 +73,7 @@ DIR=$dir
 PROMPT=$prompt
 REPORT=$report
 BRANCH=$branch
-MODEL=${3:-}
+MODEL=$model
 SPAWNED_AT=$spawned_at
 BASE=$(git -C "$dir" rev-parse HEAD)
 EOF

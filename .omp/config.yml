@@ -1,20 +1,30 @@
-# Model policy for every omp session started in this repo or its worktrees (workers).
-# Session model: Muse Spark 1.3 Contributor, fallback Claude Sonnet 5.5.
-# Subagent model: DeepSeek V4.1 Flash (OpenCode Go), fallback Claude Haiku 5.5.
+# omp policy for every session started in this repo or its worktrees. Docs: docs/LEAD.md ("Models").
+# Three fixed tiers, no prewalk:
+#   1. lead:     default -> Claude Opus 5.5 (any `omp` started in this repo)
+#   2. workers:  worker  -> Muse Spark 1.3 Contributor (backend, data, collectors)
+#                ui      -> Claude Sonnet 5.5 (web/**)
+#   3. helpers:  task    -> DeepSeek V4.1 Flash (scout, reviewer, sonic, task subagents, advisor)
+# Native workers are the agents in .omp/agents; Ghostty workers get the worker model from scripts/spawn-worker.sh.
 modelRoles:
-  default: opencode-go/muse-spark-1.3-contributor
+  default: anthropic/claude-opus-5-5
+  worker: opencode-go/muse-spark-1.3-contributor
+  ui: anthropic/claude-sonnet-5-5
   task: opencode-go/deepseek-v4.1-flash
   smol: opencode-go/deepseek-v4.1-flash
+  advisor: opencode-go/deepseek-v4.1-flash:high
 retry:
   modelFallback: true
   fallbackChains:
-    default:
+    worker:
       - anthropic/claude-sonnet-5-5
     task:
       - anthropic/claude-haiku-5-5
     smol:
       - anthropic/claude-haiku-5-5
+prewalk:
+  enabled: false
 task:
+  prewalk: false
   agentModelOverrides:
     task: "@task"
     scout: "@task"
@@ -22,3 +32,12 @@ task:
     reviewer: "@task"
     librarian: "@task"
     designer: "@task"
+  # Isolated workers commit to omp/task/<id> and nothing is applied to the lead's tree:
+  # the lead reviews the branch and merges it, like a Ghostty worker branch.
+  isolation:
+    merge: branch
+    apply: false
+  # Implementation workers run 30-90 min; the 200-request default would stop them mid-task.
+  softRequestBudget: 600
+display:
+  subagentLivePreview: true

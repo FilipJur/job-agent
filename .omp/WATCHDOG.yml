@@ -1,0 +1,10 @@
+# Advisor roster for job-agent. Applies to sessions with an advisor: the native `worker` and
+# `ui-worker` agents opt in via `advisor: true`. Guidance: .omp/WATCHDOG.md. Docs: docs/LEAD.md.
+advisors:
+  - name: Lead rules
+    model: "@advisor"
+    reviewMode: turn
+    reviewInterval: 3
+    syncBacklog: off
+    instructions: |
+      Enforce the task's file set and the worker rules. Silence is the default; one note per real problem.
