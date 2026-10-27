@@ -233,7 +233,7 @@ describe("agencies", () => {
     { name: "Gamma", web: null, city: null, focus: null, stack: null, signal: null, email: null, phone: null, fit: 3 },
   ];
 
-  test("lists fit desc then name; update edits status/notes/contact; reseed inserts 0 and keeps edits", () => {
+  test("lists seed fit desc then name; update edits status/notes/contact; reseed keeps edits", () => {
     expect(seedAgencies(db, items)).toEqual({ inserted: 3, updated: 0, skipped: 0 });
     expect(listAgencies(db).map((a) => a.name)).toEqual(["Alpha", "Beta", "Gamma"]);
 
@@ -244,16 +244,19 @@ describe("agencies", () => {
     expect(seedAgencies(db, items)).toEqual({ inserted: 0, updated: 0, skipped: 3 });
     expect(listAgencies(db).find((a) => a.name === "Beta")).toMatchObject({ status: "contacted", notes: "called" });
 
-    // Proven IČO hiring beats fit; a published rate beats no rate.
-    const crawl = { careersUrl: null, hiringEvidence: null, hourlyRate: null, rateMinCzk: null, rateMaxCzk: null, crawledAt: "t" };
+    // Open dev position beats seed fit; a stated dev rate beats no rate.
+    const crawl = { positionTitle: null, positionUrl: null, evidenceQuote: null, form: null, devRate: null, remoteOrOlomouc: false, aiFit: null, aiReason: null, crawledAt: "t" };
     const ids = Object.fromEntries(listAgencies(db).map((a) => [a.name, a.id]));
-    saveAgencyCrawl(db, ids.Gamma!, { ...crawl, hiringIco: true, hiringEvidence: "spolupráce na IČO" });
-    saveAgencyCrawl(db, ids.Beta!, { ...crawl, hiringIco: false, hourlyRate: "600 Kč/h", rateMinCzk: 600 });
+    saveAgencyCrawl(db, ids.Gamma!, {
+      ...crawl, devPositionOpen: true, positionTitle: "WP dev", positionUrl: "https://g.test/k",
+      evidenceQuote: "Hledáme WP vývojáře.", form: "hpp", aiFit: 3, aiReason: "r",
+    });
+    saveAgencyCrawl(db, ids.Beta!, { ...crawl, devPositionOpen: false, form: "ico", devRate: "600 Kč/h" });
     expect(listAgencies(db).map((a) => a.name)).toEqual(["Gamma", "Beta", "Alpha"]);
-    expect(listAgencies(db)[0]).toMatchObject({ hiringIco: true, hiringEvidence: "spolupráce na IČO" });
+    expect(listAgencies(db)[0]).toMatchObject({ devPositionOpen: true, evidenceQuote: "Hledáme WP vývojáře." });
   });
 
-  test("reseed refreshes contact fields only and keeps status, notes and last contact", () => {
+  test("reseed refreshes research fields only and keeps status, notes and last contact", () => {
     seedAgencies(db, items);
     const beta = listAgencies(db).find((a) => a.name === "Beta")!;
     updateAgency(db, beta.id, { status: "replied", notes: "n", lastContactAt: "2026-10-26" });
@@ -263,7 +266,7 @@ describe("agencies", () => {
     expect(listAgencies(db).find((a) => a.name === "Beta")).toMatchObject({
       contactUrl: "https://beta.test/kontakt",
       email: "x@beta.test",
-      focus: null,
+      focus: "new focus",
       status: "replied",
       notes: "n",
       lastContactAt: "2026-10-26",

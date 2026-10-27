@@ -1,16 +1,17 @@
 import { parseArgs } from "node:util";
 import { crawlAgency, isCrawlDue } from "../agencies/crawl";
+import type { JudgeOptions } from "../agencies/judge";
 import { createHttpClient } from "../collectors/jobscz/http";
 import { openDb } from "../db";
 import { listAgencies, saveAgencyCrawl, seedAgencies } from "../repo";
 import type { AgencySeed } from "../types";
-import agencies from "../../config/agencies.json";
+import agencySeeds from "../../config/agencies.json";
 import { createCachedFetch, type HttpMode } from "../http-cache";
 import { loadScoringConfig } from "../scoring/config";
 import { runScoring } from "../scoring/run";
 import { COLLECTORS, collectSources, dueSources, printRuns } from "./collect";
 
-const { config: scoringConfig, profile } = loadScoringConfig();
+ const { config: scoringConfig, profile } = loadScoringConfig();
 
 async function main(argv: string[]): Promise<void> {
   let limit: number | null;
@@ -43,14 +44,24 @@ async function main(argv: string[]): Promise<void> {
   const fetchText = createCachedFetch(createHttpClient().fetchText, cache);
   const db = openDb(process.env.DB_PATH || "data/jobs.db");
   try {
-    // Idempotent: a fresh host gets its agencies, an updated checkout refreshes contact data.
-    const seeded = seedAgencies(db, agencies as AgencySeed[]);
+    // Idempotent: a fresh host gets its agencies, an updated checkout refreshes research fields.
+    const seeded = seedAgencies(db, agencySeeds as AgencySeed[]);
     if (seeded.inserted + seeded.updated > 0) console.log(`agencies: inserted ${seeded.inserted}, updated ${seeded.updated}`);
     // Agency website crawl (7-day rule). A failure is printed, never fails the run.
     try {
+      const apiKey = process.env.OPENCODE_GO_API_KEY ?? "";
+      const judgeOpts: JudgeOptions | undefined =
+        apiKey === ""
+          ? undefined
+          : {
+              endpoint: scoringConfig.endpoint,
+              model: scoringConfig.model,
+              apiKey,
+              sessionId: process.env.OPENCODE_GO_SESSION ?? crypto.randomUUID(),
+            };
       const dueAgencies = listAgencies(db).filter((a) => a.web !== null && isCrawlDue(a.crawledAt, Date.now()));
       for (const a of dueAgencies) {
-        const outcome = await crawlAgency(fetchText, a);
+        const outcome = await crawlAgency(fetchText, a, undefined, judgeOpts);
         saveAgencyCrawl(db, a.id, outcome.crawl);
       }
       console.log(`agencies crawl: ${dueAgencies.length} checked`);

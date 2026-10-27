@@ -12,6 +12,8 @@ interface AgencyItemProps {
 
 const external = { target: "_blank", rel: "noreferrer noopener" } as const;
 
+const FORM_LABELS = { ico: "IČO", hpp: "HPP", both: "IČO i HPP", unknown: "forma neuvedena" } as const;
+
 function AgencyItem({ agency, saving, onSave }: AgencyItemProps) {
   const [notes, setNotes] = useState(agency.notes ?? "");
 
@@ -27,7 +29,7 @@ function AgencyItem({ agency, saving, onSave }: AgencyItemProps) {
   return (
     <motion.fieldset
       className={`grid gap-x-8 gap-y-3 border px-3 pt-1 pb-3 @3xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_19rem] sm:px-4 ${
-        agency.hiringIco ? "border-signal/60" : "border-line"
+        agency.devPositionOpen ? "border-signal/60" : "border-line"
       }`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -44,6 +46,11 @@ function AgencyItem({ agency, saving, onSave }: AgencyItemProps) {
         <span className={`${tag} ml-3 font-normal text-faint`} title="Shoda s profilem">
           fit {agency.fit}
         </span>
+        {agency.aiFit !== null && (
+          <span className="ml-2 font-normal text-faint tabular-nums" title={agency.aiReason ?? undefined}>
+            AI {agency.aiFit}
+          </span>
+        )}
       </legend>
 
       <div className="grid content-start gap-1">
@@ -58,28 +65,33 @@ function AgencyItem({ agency, saving, onSave }: AgencyItemProps) {
       </div>
 
       <div className="grid content-start gap-2">
-        {(agency.hiringIco || agency.hourlyRate !== null) && (
-          <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-            {agency.hiringIco && <span className={`${tag} bg-signal px-1.5 !font-semibold text-bg`}>hledají na IČO</span>}
-            {agency.hourlyRate !== null && <span className="text-ok">{agency.hourlyRate}</span>}
+        {agency.devPositionOpen && agency.positionTitle !== null && (
+          <p className="text-sm font-medium text-pretty">
+            {agency.positionUrl !== null ? (
+              <a className="underline decoration-signal underline-offset-2" href={withHttps(agency.positionUrl)} {...external}>
+                {agency.positionTitle} ↗
+              </a>
+            ) : (
+              agency.positionTitle
+            )}
           </p>
         )}
-        {agency.hiringEvidence !== null && (
+        {(agency.form !== null || agency.devRate !== null) && (
+          <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+            {agency.form !== null && <span className={`${tag} bg-signal px-1.5 !font-semibold text-bg`}>{FORM_LABELS[agency.form]}</span>}
+            {agency.devRate !== null && <span className="text-ok">{agency.devRate}</span>}
+            {agency.remoteOrOlomouc && <span className="text-muted">remote / Olomouc</span>}
+          </p>
+        )}
+        {agency.evidenceQuote !== null && (
           <blockquote className={`${note} text-sm text-fg/85 text-pretty before:mr-[1ch] before:text-signal before:not-italic before:content-['>']`}>
-            {agency.hiringEvidence}
-            {agency.careersUrl !== null && (
-              <>
-                {" "}
-                <a className={`${tag} not-italic whitespace-nowrap`} href={withHttps(agency.careersUrl)} {...external}>
-                  [zdroj ↗]
-                </a>
-              </>
-            )}
+            {agency.evidenceQuote}
           </blockquote>
         )}
-        {agency.hiringEvidence === null && agency.careersUrl !== null && (
-          <a className={`${linkButton} justify-self-start`} href={withHttps(agency.careersUrl)} {...external}>
-            kariérní stránka ↗
+        {agency.aiReason !== null && <p className="text-sm text-muted text-pretty">{agency.aiReason}</p>}
+        {agency.positionUrl !== null && agency.evidenceQuote === null && (
+          <a className={`${linkButton} justify-self-start`} href={withHttps(agency.positionUrl)} {...external}>
+            otevřená pozice ↗
           </a>
         )}
         <p className={`${tag} text-faint`} title={agency.crawledAt ?? undefined}>
@@ -175,8 +187,8 @@ export function AgenciesView({ agencies, savingId, onSave }: AgenciesViewProps) 
       </p>
     );
   }
-  const hiring = agencies.filter((agency) => agency.hiringIco);
-  const others = agencies.filter((agency) => !agency.hiringIco);
+  const open = agencies.filter((agency) => agency.devPositionOpen);
+  const others = agencies.filter((agency) => !agency.devPositionOpen);
 
   const renderSection = (title: string, rows: AgencyRow[], empty: string) => (
     <section className="mb-8 @container" aria-label={title}>
@@ -205,8 +217,8 @@ export function AgenciesView({ agencies, savingId, onSave }: AgenciesViewProps) 
 
   return (
     <>
-      {renderSection("Shánějí na IČO", hiring, "zatím nikdo, u koho by crawler našel výslovné hledání na IČO. Zkontroluj, jestli už běžel.")}
-      {renderSection("Ostatní agentury", others, "žádné další agentury.")}
+      {renderSection("Hledají web dev teď", open, "zatím nikdo, u koho by crawler našel otevřenou web-dev pozici. Zkontroluj, jestli už běžel.")}
+      {renderSection("Bez otevřené pozice", others, "žádné další agentury.")}
     </>
   );
 }

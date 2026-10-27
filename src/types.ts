@@ -142,6 +142,8 @@ export interface OfferToScore {
   labels: string[];
 }
 
+export type AgencyForm = "ico" | "hpp" | "both" | "unknown";
+
 export type AgencyRow = {
   id: number;
   name: string;
@@ -161,18 +163,26 @@ export type AgencyRow = {
   updatedAt: string;
 } & AgencyCrawl;
 
-/** Result of crawling an agency website (src/agencies/crawl.ts); all null/false until crawled. */
+/** Result of crawling an agency website (src/agencies/crawl.ts); all null/false until a judgment ran. */
 export interface AgencyCrawl {
-  /** Page where the hiring evidence was found (careers page or offer page). */
-  careersUrl: string | null;
-  /** True only with explicit evidence that the agency seeks someone on IČO/freelance/externally. */
-  hiringIco: boolean;
-  /** Short quote from that page proving `hiringIco`. */
-  hiringEvidence: string | null;
-  /** Hourly rate as written on their site (e.g. "500–700 Kč/h"), null if not published. */
-  hourlyRate: string | null;
-  rateMinCzk: number | null;
-  rateMaxCzk: number | null;
+  /** True only with a verified verbatim quote proving a web-dev role is open right now. */
+  devPositionOpen: boolean;
+  /** Open role title, or null. */
+  positionTitle: string | null;
+  /** One of the fetched page URLs, or null when the model URL fails validation. */
+  positionUrl: string | null;
+  /** Verbatim quote from the fetched page text proving the open role, or null. */
+  evidenceQuote: string | null;
+  /** Contract form of the open role; null when no judgment ran yet. */
+  form: AgencyForm | null;
+  /** Developer pay as stated (never a client price); null when unstated or unverifiable. */
+  devRate: string | null;
+  /** Role is remote or in Olomouc. */
+  remoteOrOlomouc: boolean;
+  /** Loose 0-10 fit from the agency rubric; null when no judgment ran yet. */
+  aiFit: number | null;
+  /** One Czech sentence explaining the fit; null when no judgment ran yet. */
+  aiReason: string | null;
   crawledAt: string | null;
 }
 
