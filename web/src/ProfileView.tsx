@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchProfile, saveProfile } from "./api";
 import { offerCount } from "./format";
+import { ProposalPanel } from "./ProposalPanel";
 import { primaryButton } from "./ui";
 
 export function ProfileView({ onError }: { onError: (message: string) => void }) {
@@ -8,18 +9,26 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
   const [pending, setPending] = useState(0);
   const [saving, setSaving] = useState(false);
 
+  const load = useCallback(async (signal: AbortSignal) => {
+    const profile = await fetchProfile(signal);
+    setText(profile.text);
+    setPending(profile.pending);
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
-    fetchProfile(controller.signal)
-      .then((profile) => {
-        setText(profile.text);
-        setPending(profile.pending);
-      })
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) onError(cause instanceof Error ? cause.message : "Profil se nepodařilo načíst");
-      });
+    load(controller.signal).catch((cause: unknown) => {
+      if (!controller.signal.aborted) onError(cause instanceof Error ? cause.message : "Profil se nepodařilo načíst");
+    });
     return () => controller.abort();
-  }, [onError]);
+  }, [load, onError]);
+
+  const reload = () => {
+    const controller = new AbortController();
+    load(controller.signal).catch((cause: unknown) => {
+      onError(cause instanceof Error ? cause.message : "Profil se nepodařilo načíst");
+    });
+  };
 
   if (text === null) {
     return <p className="py-10 text-muted">načítám profil…</p>;
@@ -40,6 +49,7 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
 
   return (
     <section className="grid gap-3">
+      <ProposalPanel onError={onError} onApplied={reload} />
       <fieldset className="border border-line px-3 pb-3 sm:px-4">
         <legend className="text-[0.75rem] font-medium tracking-[0.2em] text-faint uppercase">profile.md</legend>
         <textarea
