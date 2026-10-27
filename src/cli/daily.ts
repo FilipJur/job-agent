@@ -13,7 +13,7 @@ import { COLLECTORS, collectSources, dueSources, printRuns } from "./collect";
 import { printResult } from "./tune";
 import { generateProposal } from "../tune/generate";
 import { isTuneDue } from "../tune/proposals";
-
+import { runDigest } from "../digest/run";
 const { config: scoringConfig, profile } = loadScoringConfig();
 
 async function main(argv: string[]): Promise<void> {
@@ -117,6 +117,15 @@ async function main(argv: string[]): Promise<void> {
       }
     } catch (e) {
       console.error(`tune failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    // Morning digest last: build, write and optionally push. Failure is printed, never fails the run.
+    try {
+      if (limit === null) {
+        const result = await runDigest({ db });
+        console.log(`digest: ${result.short}`);
+      }
+    } catch (e) {
+      console.error(`digest failed: ${e instanceof Error ? e.message : String(e)}`);
     }
     if (collectErrors > 0 || exitCode !== 0) process.exitCode = 1;
   } finally {
