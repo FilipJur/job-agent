@@ -29,6 +29,20 @@ describe("offerRate", () => {
     ["text EUR/month", { description: "Gross salary range €5000–€6000 per month" }, { czkPerHour: 859, basis: "text" }],
     ["text USD/month", { description: "$3,500-$5,000 USD/month" }, { czkPerHour: 579, basis: "text" }],
     ["text EUR month range", { description: "3,700 EUR - 5,000 EUR / Month" }, { czkPerHour: 680, basis: "text" }],
+    ["bare $200K-$250K yearly range", { description: "Compensation: $200K–$250K + equity" }, { czkPerHour: 2555, basis: "text" }],
+    ["bare $12K project fee dropped", { description: "Fixed-fee project ($12K, milestone-based)" }, null],
+    ["CAD range skipped, USD range kept", { description: "$185K–$220K USD / $155K–$185K CAD" }, { czkPerHour: 2299, basis: "text" }],
+    ["C$ amount is not USD", { description: "Salary C$180K" }, null],
+    ["equity /yr is not salary", { description: "up to $380,895/yr Performance Share Units and $273,628/yr PSUs" }, null],
+    ["benefit /yr is not salary", { description: "Learning allowance of $9,000/yr" }, null],
+    ["salary /yr + benefits still counts", { description: "$150,000/yr + benefits" }, { czkPerHour: 1703, basis: "text" }],
+    ["budget range counts as yearly", { description: "$134,450–$167,258 total budget (COL-adjusted)" }, { czkPerHour: 1713, basis: "text" }],
+    ["single budget amount ignored", { description: "$50,000 budget for the project" }, null],
+    [
+      "budget range wins over equity /yr",
+      { description: "$134,450–$167,258 total budget. Up to $380,895/yr Performance Share Units" },
+      { czkPerHour: 1713, basis: "text" },
+    ],
   ] as const)("%s", (_, patch, expected) => {
     expect(offerRate({ ...base, ...patch }, marketConfig)).toEqual(expected);
   });
@@ -51,9 +65,10 @@ test("percentiles interpolate linearly", () => {
 
 describe("marketReport", () => {
   const cfg = { ...marketConfig, skills: [{ name: "Python", match: ["python"] }, { name: "Java", match: ["java"] }] };
+  const profile = "## Silné stránky\n- TypeScript\n";
 
   /** One score row per tuple: [offerId, score, verdict, gaps, scoredAt]; the offer is created on first use. */
-  function report(scores: [number, number, "fit" | "blocked", string, string?][]): MarketReport {
+  function report(scores: [number, number, "fit" | "blocked", string, string?][], profileText = profile): MarketReport {
     const db = openDb(":memory:");
     for (const [id, score, verdict, gaps, scoredAt = "2026-10-27T10:00:00Z"] of scores) {
       db.run(
@@ -67,7 +82,7 @@ describe("marketReport", () => {
         [id, score, gaps, verdict, scoredAt],
       );
     }
-    return marketReport(db, new Date("2026-10-27T12:00:00Z"), cfg);
+    return marketReport(db, new Date("2026-10-27T12:00:00Z"), cfg, profileText);
   }
 
   test("leverage counts only near-miss fit offers whose latest gaps name the skill", () => {
@@ -84,6 +99,18 @@ describe("marketReport", () => {
       ["Python", 2],
       ["Java", 1],
     ]);
+  });
+
+  test("an owned skill never appears in leverage, but stays in skills", () => {
+    const r = report(
+      [
+        [1, 5, "fit", "Python"],
+        [2, 5, "fit", "Java"],
+      ],
+      "## Silné stránky\n- Python\n## Slabé stránky\n- Java\n",
+    );
+    expect(r.skills.find((s) => s.skill === "Python")).toMatchObject({ owned: true, leverage: 1 });
+    expect(r.leverage.map((s) => s.skill)).toEqual(["Java"]);
   });
 
   test("only the latest score row of an offer counts", () => {
@@ -122,6 +149,17 @@ describe("skillStats", () => {
     );
     expect(stats.find((s) => s.skill === "Python")).toMatchObject({ offers: 1 });
     expect(stats.find((s) => s.skill === "Java")).toMatchObject({ offers: 0 });
+  });
+
+  test("jest does not match the Czech word ještě", () => {
+    const stats = skillStats(
+      [
+        { text: "ještě jedna pozice", score: null, verdict: null, gaps: null },
+        { text: "unit tests in Jest", score: null, verdict: null, gaps: null },
+      ],
+      [{ name: "Testing", match: ["jest"] }],
+    );
+    expect(stats[0]).toMatchObject({ offers: 1 });
   });
 
   test("strengths section slicing", () => {

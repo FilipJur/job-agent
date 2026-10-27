@@ -72,6 +72,14 @@ const DAY = String.raw`(?:\s*\/\s*|\s+(?:per|za|an|a)\s+)(?:days?|den|dne|dny|dn
 /** "/yr", "per year" (explicit yearly in text, e.g. "$380,895/yr"). */
 const YEAR =
   String.raw`(?:\s*\/\s*|\s+(?:per|za|an|a)\s+|\s+)(?:years?|yrs?|yr|annual[a-z]*|rok[a-z]*|let[a-z]*)(?![\p{L}\d])`;
+/** "$134,450–$167,258 total budget": a budget range is a yearly package; single amounts are too ambiguous. */
+const BUDGET = String.raw`\s+(?:total\s+)?budget(?![\p{L}\d])`;
+/** Equity and benefit figures, not salary: "$380,895/yr Performance Share Units", "allowance of $1,000/yr". */
+const NON_SALARY = /\b(?:psus?|rsus?|units?|allowance|cafeteria|benefits?|courses?)\b/;
+/** Bare-K yearly floor (thousands): below it a "$12K" is a project fee or bonus, not a tech salary. */
+const BARE_K_MIN = 30;
+/** Dollar-like symbols of other currencies ("C$", "A$", "HK$") and explicit codes are not USD. */
+const OTHER_DOLLAR = String.raw`(?:cad|aud|nzd|sgd|hkd)`;
 
 /** "450 Kč/h", "500–700 CZK/hod", "$23-$34 USD/hour", "€5000–€6000 per month", "7 000 Kč/MD". */
 const suffixRe = (period: string): RegExp =>
@@ -91,6 +99,8 @@ const SUFFIX_DAY = suffixRe(DAY);
 const PREFIX_DAY = prefixRe(DAY);
 const SUFFIX_YEAR = suffixRe(YEAR);
 const PREFIX_YEAR = prefixRe(YEAR);
+const SUFFIX_BUDGET = suffixRe(BUDGET);
+const PREFIX_BUDGET = prefixRe(BUDGET);
 
 const plausible = (rate: number): boolean => rate >= MIN_RATE && rate <= MAX_RATE;
 
@@ -108,6 +118,15 @@ export function salaryRate(o: RateInput, cfg: MarketConfig): number | null {
 
 function parseAmount(raw: string): number {
   return /^\d{1,3}(?:[ .,]\d{3})+$/.test(raw) ? Number(raw.replace(/[ .,]/g, "")) : Number(raw.replace(",", "."));
+}
+
+/** True when the text right before or after a `/yr` match, within its clause, names equity or a benefit. */
+function isNonSalary(text: string, m: RegExpMatchArray): boolean {
+  const start = m.index ?? 0;
+  const clause = /[.;\n,+]/;
+  const before = text.slice(Math.max(0, start - 30), start).split(clause).pop() ?? "";
+  const after = text.slice(start + m[0].length, start + m[0].length + 30).split(clause)[0] ?? "";
+  return NON_SALARY.test(before) || NON_SALARY.test(after);
 }
 
 /**
@@ -128,16 +147,26 @@ export function textRate(text: string, cfg: MarketConfig): number | null {
   for (const m of t.matchAll(PREFIX_MONTH)) add(cfg.hoursPerMonth, m[1] ?? "", m[2], m[3]);
   for (const m of t.matchAll(SUFFIX_DAY)) add(8, m[3] ?? "", m[1], m[2]);
   for (const m of t.matchAll(PREFIX_DAY)) add(8, m[1] ?? "", m[2], m[3]);
-  for (const m of t.matchAll(SUFFIX_YEAR)) add(cfg.hoursPerYear, m[3] ?? "", m[1], m[2]);
-  for (const m of t.matchAll(PREFIX_YEAR)) add(cfg.hoursPerYear, m[1] ?? "", m[2], m[3]);
+  const addYear = (m: RegExpMatchArray, currency: string, ...amounts: (string | undefined)[]): void => {
+    if (isNonSalary(t, m)) return;
+    add(cfg.hoursPerYear, currency, ...amounts);
+  };
+  for (const m of t.matchAll(SUFFIX_YEAR)) addYear(m, m[3] ?? "", m[1], m[2]);
+  for (const m of t.matchAll(PREFIX_YEAR)) addYear(m, m[1] ?? "", m[2], m[3]);
+  for (const m of t.matchAll(SUFFIX_BUDGET)) if (m[2] !== undefined) addYear(m, m[3] ?? "", m[1], m[2]);
+  for (const m of t.matchAll(PREFIX_BUDGET)) if (m[3] !== undefined) addYear(m, m[1] ?? "", m[2], m[3]);
   // Bare "$200K-$250K" yearly ranges (HN posts): the only bare amounts, so no unit mixup.
-  const yearly = [
-    ...t.matchAll(new RegExp(String.raw`(?<![\d.,])(\$|€|£|usd|gbp|eur)\s*(\d+(?:[.,]\d{1,2})?)\s*k(?![\p{L}\d])`, "giu")),
-  ].filter((m) => Number.parseFloat((m[2] ?? "").replace(",", ".")) >= 10);
-  for (const m of yearly) {
+  // Another currency's dollars ("$155K–$185K CAD", "C$155K") are skipped, not priced as USD.
+  const bareK = new RegExp(
+    String.raw`(?<![\p{L}\d.,])(\$|€|£|usd|gbp|eur)\s*(\d+(?:[.,]\d{1,2})?)\s*k(?![\p{L}\d])` +
+      String.raw`(?!(?:\s*(?:-|–|—|to)\s*[$€£]?\s*\d+(?:[.,]\d{1,2})?\s*k)?\s*${OTHER_DOLLAR}(?![\p{L}\d]))`,
+    "giu",
+  );
+  for (const m of t.matchAll(bareK)) {
+    const thousands = Number((m[2] ?? "").replace(",", "."));
     const factor = czkFactor(m[1] ?? "", cfg);
-    if (factor === null) continue;
-    values.push((Number((m[2] ?? "").replace(",", ".")) * 1000 * factor) / cfg.hoursPerYear);
+    if (thousands < BARE_K_MIN || factor === null) continue;
+    values.push((thousands * 1000 * factor) / cfg.hoursPerYear);
   }
   if (values.length === 0) return null;
   return (Math.min(...values) + Math.max(...values)) / 2;

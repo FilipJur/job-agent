@@ -23,12 +23,12 @@ export function fold(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 }
 
-/** Any term of the skill, bounded by non-alphanumerics (so "java" does not match "javascript"). */
+/** Any term of the skill, bounded by non-alphanumerics (so "java" does not match "javascript"). Terms of 5+ chars take a Czech ending; shorter ones stay exact ("jest" would otherwise match "ještě"). */
 function skillPattern(skill: SkillDef): RegExp {
   const terms = skill.match.map((t) => {
     const folded = fold(t);
     const term = folded.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
-    return folded.length >= 4 ? `${term}(?:${INFLECT.join("|")})?` : term;
+    return folded.length >= 5 ? `${term}(?:${INFLECT.join("|")})?` : term;
   });
   return new RegExp(`(?<![a-z0-9])(?:${terms.join("|")})(?![a-z0-9])`);
 }

@@ -79,8 +79,16 @@ function band(form: RateForm, place: RatePlace, values: number[]): RateBand {
   };
 }
 
-/** Rate bands, rate samples and skill demand over all stored offers and their latest scores. */
-export function marketReport(db: Database, now: Date = new Date(), cfg: MarketConfig = marketConfig): MarketReport {
+/**
+ * Rate bands, rate samples and skill demand over all stored offers and their latest scores.
+ * `profile` is the raw profile text deciding which skills are owned (default: the live profile).
+ */
+export function marketReport(
+  db: Database,
+  now: Date = new Date(),
+  cfg: MarketConfig = marketConfig,
+  profile: string = readProfile(),
+): MarketReport {
   // Latest score per offer: newest scored_at, then highest id (the rule of src/repo.ts).
   const rows = db
     .query<MarketRow, []>(
@@ -141,7 +149,7 @@ export function marketReport(db: Database, now: Date = new Date(), cfg: MarketCo
   const skills = skillStats(
     rows.map((r) => ({ text: `${r.title}\n${r.description}`, score: r.score, verdict: r.verdict, gaps: r.gaps })),
     cfg.skills,
-    readProfile(),
+    profile,
   );
   const leverage = skills
     .filter((s) => s.leverage > 0 && !s.owned)
