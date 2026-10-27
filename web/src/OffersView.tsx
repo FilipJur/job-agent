@@ -33,7 +33,7 @@ const rowVariants = {
 };
 
 /** Ten-cell gauge drawn with box characters: heavy line = score on the ramp colour, light line = dim rail. */
-function ScoreBar({ score }: { score: number | undefined }) {
+export function ScoreBar({ score }: { score: number | undefined }) {
   const filled = score ?? 0;
   return (
     <span

@@ -7,6 +7,27 @@ export interface OfferFilters {
   hidden: boolean;
 }
 
+export interface AspirationRow {
+  id: number;
+  title: string;
+  company: string | null;
+  url: string;
+  city: string | null;
+  workplace: OfferRow["workplace"];
+  locationText: string | null;
+  score: number;
+  reason: string;
+  direction: string;
+  gaps: string;
+  labels: string[];
+  model: string;
+  scoredAt: string;
+}
+
+export async function fetchAspirations(signal: AbortSignal): Promise<AspirationRow[]> {
+  return request<AspirationRow[]>("/api/aspirations", { signal });
+}
+
 /** Extracts the `{ error }` message the API returns for 4xx/5xx responses. */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);

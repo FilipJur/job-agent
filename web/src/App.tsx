@@ -1,27 +1,31 @@
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchAgencies, fetchOffers, patchAgency, saveFeedback } from "./api";
-import type { OfferFilters } from "./api";
+import { fetchAgencies, fetchAspirations, fetchOffers, patchAgency, saveFeedback } from "./api";
+import type { AspirationRow, OfferFilters } from "./api";
 import { AgenciesView } from "./AgenciesView";
-import { applyFilters, NO_CLIENT_FILTERS } from "./filters";
+import { AspirationsView } from "./AspirationsView";
+import { applyFilters, MIN_SCORES, NO_CLIENT_FILTERS } from "./filters";
 import type { ClientFilters } from "./filters";
-import { agencyCount } from "./format";
+import { agencyCount, offerRatio } from "./format";
 import { linkButton } from "./ui";
 import { OfferFilterBar } from "./OfferFilterBar";
 import { OffersView } from "./OffersView";
 import { ProfileView } from "./ProfileView";
 import type { AgencyPatch, AgencyRow, OfferRow, Tab, Verdict } from "./types";
 
-type View = Tab | "agencies" | "profile";
+type View = Tab | "aspirace" | "agencies" | "profile";
 
 const TABS: { key: View; label: string }[] = [
   { key: "hpp", label: "HPP" },
   { key: "kontrakty", label: "Kontrakty" },
+  { key: "aspirace", label: "Aspirace" },
   { key: "agencies", label: "Agentury" },
   { key: "profile", label: "Profil" },
 ];
 
 const NO_SERVER_FILTERS: OfferFilters = { onlyNew: false, remote: false, olomouc: false, hidden: false };
+
+const CLIENT_FILTER_KEY = "job-agent.client-filters";
 
 const viewFromHash = (): View => {
   const hash = window.location.hash.slice(1);
@@ -29,6 +33,32 @@ const viewFromHash = (): View => {
 };
 
 const errorText = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause));
+
+const isSortKey = (value: unknown): value is ClientFilters["sort"] => value === "score" || value === "newest";
+
+const readStoredFilters = (): ClientFilters => {
+  try {
+    const raw = sessionStorage.getItem(CLIENT_FILTER_KEY);
+    if (raw === null) return NO_CLIENT_FILTERS;
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed === null || typeof parsed !== "object") return NO_CLIENT_FILTERS;
+    const candidate = parsed as Partial<Record<keyof ClientFilters, unknown>>;
+    return {
+      labels: Array.isArray(candidate.labels)
+        ? candidate.labels.filter((label): label is string => typeof label === "string")
+        : NO_CLIENT_FILTERS.labels,
+      minScore: typeof candidate.minScore === "number" && (MIN_SCORES as readonly number[]).includes(candidate.minScore)
+        ? candidate.minScore
+        : NO_CLIENT_FILTERS.minScore,
+      source: typeof candidate.source === "string" ? candidate.source : NO_CLIENT_FILTERS.source,
+      query: typeof candidate.query === "string" ? candidate.query : NO_CLIENT_FILTERS.query,
+      sort: isSortKey(candidate.sort) ? candidate.sort : NO_CLIENT_FILTERS.sort,
+    };
+  } catch {
+    return NO_CLIENT_FILTERS;
+  }
+};
+
 
 /** Plain terminal-style progress line; offers keep their rhythm once data lands. */
 function OffersSkeleton({ loading }: { loading: boolean }) {
@@ -43,10 +73,10 @@ function OffersSkeleton({ loading }: { loading: boolean }) {
 export function App() {
   const [view, setView] = useState<View>(viewFromHash);
   const [serverFilters, setServerFilters] = useState<OfferFilters>(NO_SERVER_FILTERS);
-  const [clientFilters, setClientFilters] = useState<ClientFilters>(NO_CLIENT_FILTERS);
-  // Rows remember their tab so a slow response never shows the other tab's offers.
+  const [clientFilters, setClientFilters] = useState<ClientFilters>(readStoredFilters);
   const [loaded, setLoaded] = useState<{ tab: Tab; rows: OfferRow[] } | null>(null);
   const [agencies, setAgencies] = useState<AgencyRow[] | null>(null);
+  const [aspirations, setAspirations] = useState<AspirationRow[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pendingOffer, setPendingOffer] = useState<number | null>(null);
@@ -61,6 +91,14 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    try {
+      sessionStorage.setItem(CLIENT_FILTER_KEY, JSON.stringify(clientFilters));
+    } catch {
+      // Private mode or quota: filters still work for the session, only reload persistence is lost.
+    }
+  }, [clientFilters]);
+
+  useEffect(() => {
     if (view === "profile") {
       setLoading(false);
       return;
@@ -69,9 +107,11 @@ export function App() {
     setLoading(true);
     setError(null);
     const load =
-      view === "agencies"
-        ? fetchAgencies(controller.signal).then(setAgencies)
-        : fetchOffers(view, serverFilters, controller.signal).then((rows) => setLoaded({ tab: view, rows }));
+      view === "aspirace"
+        ? fetchAspirations(controller.signal).then(setAspirations)
+        : view === "agencies"
+          ? fetchAgencies(controller.signal).then(setAgencies)
+          : fetchOffers(view, serverFilters, controller.signal).then((rows) => setLoaded({ tab: view, rows }));
     load
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) setError(`Načtení selhalo: ${errorText(cause)}`);
@@ -125,7 +165,7 @@ export function App() {
     }
   };
 
-  const isOffers = view !== "agencies" && view !== "profile";
+  const isOffers = view !== "agencies" && view !== "profile" && view !== "aspirace";
 
   return (
     <MotionConfig reducedMotion="user">
@@ -210,6 +250,14 @@ export function App() {
                 )}
               </>
             )}
+            {view === "aspirace" && (
+              <>
+                <p className="mb-4 text-sm text-muted tabular-nums" aria-live="polite">
+                  {loading ? "načítám…" : aspirations === null ? "" : offerRatio(aspirations.length, aspirations.length)}
+                </p>
+                {aspirations !== null && <AspirationsView rows={aspirations} />}
+              </>
+            )}
             {view === "agencies" && (
               <>
                 <p className="mb-4 text-sm text-muted tabular-nums" aria-live="polite">
@@ -228,9 +276,11 @@ export function App() {
           <span className="hidden text-[0.75rem] tracking-[0.06em] text-faint sm:block">
             {isOffers
               ? "j/k pohyb · u d r h verdikt · o otevřít · / hledat · esc zrušit"
-              : view === "agencies"
-                ? "stav a poznámky se ukládají hned"
-                : "uložit tlačítkem, přehodnocení při dalším scoringu"}
+              : view === "aspirace"
+                ? "bez zpětné vazby · mimo současný dosah"
+                : view === "agencies"
+                  ? "stav a poznámky se ukládají hned"
+                  : "uložit tlačítkem, přehodnocení při dalším scoringu"}
           </span>
         </div>
       </footer>
