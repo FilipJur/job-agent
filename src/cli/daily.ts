@@ -11,7 +11,7 @@ import { loadScoringConfig } from "../scoring/config";
 import { runScoring } from "../scoring/run";
 import { COLLECTORS, collectSources, dueSources, printRuns } from "./collect";
 
- const { config: scoringConfig, profile } = loadScoringConfig();
+const { config: scoringConfig, profile } = loadScoringConfig();
 
 async function main(argv: string[]): Promise<void> {
   let limit: number | null;
