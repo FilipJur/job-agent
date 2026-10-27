@@ -71,8 +71,13 @@ describe("agencies-crawl", () => {
     for (const c of cases) {
       const origin = "https://example.cz";
       const url = `${origin}${c.path}`;
+      const sitemap = `<?xml version="1.0"?><urlset><url><loc>${url}</loc></url></urlset>`;
       const outcome = await crawlAgency(
-        fakeFetch({ [`${origin}/robots.txt`]: "User-agent: *\nDisallow:\n", [url]: `<html><body><p>${c.body}</p></body></html>` }),
+        fakeFetch({
+          [`${origin}/robots.txt`]: "User-agent: *\nDisallow:\n",
+          [`${origin}/sitemap.xml`]: sitemap,
+          [url]: `<html><body><p>${c.body}</p></body></html>`,
+        }),
         { id: 1, name: "Example", web: origin },
         "2026-10-27T00:00:00.000Z",
       );
@@ -110,6 +115,16 @@ describe("agencies-crawl", () => {
     expect(isCrawlDue("2026-10-22T00:00:00.000Z", now)).toBe(false);
   });
 
+  test("fallbacks interleave bare and www hosts per path", async () => {
+    const pages = await discoverPages(async () => ({ status: 404, url: "x", body: "nope" }), "https://example.cz");
+    expect(pages.slice(0, 4)).toEqual([
+      "https://example.cz/kariera",
+      "https://www.example.cz/kariera",
+      "https://example.cz/kariera/",
+      "https://www.example.cz/kariera/",
+    ]);
+  });
+ 
   test("page cap: at most 8 pages fetched per agency", async () => {
     const calls: string[] = [];
     const origin = "https://example.cz";

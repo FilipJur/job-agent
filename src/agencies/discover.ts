@@ -115,10 +115,11 @@ export async function discoverPages(fetchText: FetchText, web: string): Promise<
   }
 
   // Fallbacks try both the web origin and its www variant: sitemap-less sites
-  // often serve on only one of them; record mode caches each exact URL string.
+  // often serve on only one of them. Interleaved per path so a page cap that
+  // consumes N paths still covers both hosts.
   if (found.length === 0) {
     const alt = origin.includes("://www.") ? origin.replace("://www.", "://") : origin.replace("://", "://www.");
-    for (const base of [origin, alt]) for (const p of FALLBACK_PATHS) push(`${base}${p}`);
+    for (const p of FALLBACK_PATHS) for (const base of [origin, alt]) push(`${base}${p}`);
   }
   return found;
 }
