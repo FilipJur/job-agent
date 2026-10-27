@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchDraft, fetchFacts, generateDraft } from "./api";
+import { ApiError, fetchDraft, fetchFacts, generateDraft } from "./api";
 import { fieldLabel, linkButton, note, primaryButton, tag } from "./ui";
 import type { Draft, Fact } from "./types";
 
@@ -71,14 +71,19 @@ export function DraftPanel({ offerId, offerTitle, offerUrl, onError, onMissingFa
       setDraft(created);
     } catch (cause) {
       if (controller.signal.aborted) return;
-      const message = cause instanceof Error ? cause.message : String(cause);
       // 409 = no facts: link to the facts editor in the Profil tab.
-      if (/fakt/i.test(message)) {
+      if (cause instanceof ApiError && cause.status === 409) {
         setFactsEmpty(true);
-      } else {
-        setFailure(message);
-        onError(`Generování návrhu selhalo: ${message}`);
+        return;
       }
+      const message =
+        cause instanceof ApiError && cause.status === 503
+          ? "chybí OPENCODE_GO_API_KEY na serveru"
+          : cause instanceof Error
+            ? cause.message
+            : String(cause);
+      setFailure(message);
+      onError(`Generování návrhu selhalo: ${message}`);
     } finally {
       setGenerating(false);
     }

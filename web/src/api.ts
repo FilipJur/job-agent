@@ -11,22 +11,22 @@ export async function fetchAspirations(signal: AbortSignal): Promise<AspirationR
   return request<AspirationRow[]>("/api/aspirations", { signal });
 }
 
+/** Error carrying the HTTP status, so callers can branch on 409/503 instead of message text. */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 /** Extracts the `{ error }` message the API returns for 4xx/5xx responses. */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
+  if (!response.ok) throw await apiError(response);
   const text = await response.text();
-  if (!response.ok) {
-    let message = `HTTP ${response.status}`;
-    try {
-      const parsed: unknown = JSON.parse(text);
-      if (parsed !== null && typeof parsed === "object" && "error" in parsed && typeof parsed.error === "string") {
-        message = parsed.error;
-      }
-    } catch {
-      // Keep the status-based message for non-JSON error bodies.
-    }
-    throw new Error(message);
-  }
   return (text.length > 0 ? JSON.parse(text) : null) as T;
 }
 
@@ -84,7 +84,7 @@ export async function fetchAgencies(signal: AbortSignal): Promise<AgencyRow[]> {
 export async function fetchMarket(signal: AbortSignal): Promise<MarketReport | null> {
   const response = await fetch("/api/market", { signal });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(await errorBody(response));
+  if (!response.ok) throw await apiError(response);
   return (await response.json()) as MarketReport;
 }
 
@@ -116,7 +116,7 @@ export async function saveProfile(text: string): Promise<ProfileStatus> {
 export async function fetchFacts(signal: AbortSignal): Promise<FactsStatus | null> {
   const response = await fetch("/api/facts", { signal });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(await errorBody(response));
+  if (!response.ok) throw await apiError(response);
   return (await response.json()) as FactsStatus;
 }
 
@@ -131,14 +131,14 @@ export async function saveFacts(text: string): Promise<FactsStatus> {
 export async function fetchApplications(signal: AbortSignal): Promise<Application[] | null> {
   const response = await fetch("/api/applications", { signal });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(await errorBody(response));
+  if (!response.ok) throw await apiError(response);
   const parsed: unknown = await response.json();
   return Array.isArray(parsed) ? (parsed as Application[]) : [];
 }
 
 export async function saveApplication(
   offerId: number,
-  patch: { stage: AppStage | null; nextActionAt?: string | null; notes?: string | null },
+  patch: { stage: AppStage; nextActionAt?: string | null; notes?: string | null },
 ): Promise<Application> {
   return request<Application>(`/api/offers/${offerId}/application`, {
     method: "PUT",
@@ -154,13 +154,13 @@ export async function removeApplication(offerId: number): Promise<void> {
 export async function fetchDraft(offerId: number, signal: AbortSignal): Promise<Draft | null> {
   const response = await fetch(`/api/offers/${offerId}/draft`, { signal });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(await errorBody(response));
+  if (!response.ok) throw await apiError(response);
   return (await response.json()) as Draft;
 }
 
 export async function generateDraft(offerId: number, signal: AbortSignal): Promise<Draft> {
   const response = await fetch(`/api/offers/${offerId}/draft`, { method: "POST", signal });
-  if (!response.ok) throw new Error(await errorBody(response));
+  if (!response.ok) throw await apiError(response);
   return (await response.json()) as Draft;
 }
 
@@ -171,7 +171,7 @@ export async function generateDraft(offerId: number, signal: AbortSignal): Promi
 export async function fetchProposals(signal: AbortSignal): Promise<Proposal[] | null> {
   const response = await fetch("/api/proposals", { signal });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(await errorBody(response));
+  if (!response.ok) throw await apiError(response);
   return (await response.json()) as Proposal[];
 }
 
@@ -186,18 +186,18 @@ export async function rejectProposal(id: string): Promise<void> {
 async function proposalAction(id: string, action: "apply" | "reject"): Promise<void> {
   const response = await fetch(`/api/proposals/${encodeURIComponent(id)}/${action}`, { method: "POST" });
   if (response.ok) return;
-  throw new Error(await errorBody(response));
+  throw await apiError(response);
 }
 
-async function errorBody(response: Response): Promise<string> {
+async function apiError(response: Response): Promise<ApiError> {
   const text = await response.text();
   try {
     const parsed: unknown = JSON.parse(text);
     if (parsed !== null && typeof parsed === "object" && "error" in parsed && typeof parsed.error === "string") {
-      return parsed.error;
+      return new ApiError(response.status, parsed.error);
     }
   } catch {
     // Keep the status-based message for non-JSON error bodies.
   }
-  return `HTTP ${response.status}`;
+  return new ApiError(response.status, `HTTP ${response.status}`);
 }
