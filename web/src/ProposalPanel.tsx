@@ -141,6 +141,11 @@ export function ProposalPanel({ onApplied, onError }: { onApplied: () => void; o
             </p>
           )}
           <MetricTable proposal={pending} />
+          {pending.evaluation?.kind === "holdout" ? (
+            <p className="pt-2 text-sm text-muted">měřeno na odložených {pending.evaluation.n} štítcích</p>
+          ) : (
+            <p className="pt-2 text-sm text-bad">měřeno na stejných štítcích (málo dat, odhad je optimistický)</p>
+          )}
           {pending.rationale.length > 0 && (
             <div className="pt-3">
               <p className={fieldLabel}>zdůvodnění</p>

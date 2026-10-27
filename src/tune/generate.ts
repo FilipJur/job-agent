@@ -1,11 +1,17 @@
 import type { Database } from "bun:sqlite";
-import { labeledOffers, type EvalLabel, type LabeledOffer } from "../eval/labels";
-import { replayLabeled, type ReplayOptions, type ReplayResult } from "../eval/replay";
-import { defaultPostJson, type PostJson } from "../scoring/client";
+import { labeledOffers, labeledOffersToScore, type EvalLabel, type LabeledOffer } from "../eval/labels";
+import { computeMetrics } from "../eval/metrics";
+import { type ReplayItem, type ReplayOptions, type ReplayResult } from "../eval/replay";
+import { defaultPostJson, scoreOneOffer, type PostJson } from "../scoring/client";
 import { proposalIdOf, saveProposal, summarize, type EvalSummary, type StoredProposal } from "./proposals";
 
 export const MIN_LABELS = 10;
 export const MIN_PER_CLASS = 3;
+
+/** Hold-out needs enough labels to leave a measurable slice aside. */
+export const HOLDOUT_MIN_LABELS = 24;
+/** Stable bucket: offers with `offerId % HOLDOUT_MODULO === 0` are held out. */
+export const HOLDOUT_MODULO = 3;
 
 export interface GenerateOptions {
   /** The live profile the proposal starts from. */
@@ -50,9 +56,12 @@ function buildPrompt(profile: string, offers: LabeledOffer[], replay: ReplayResu
     );
   };
   const byId = new Map(offers.map((o) => [o.offerId, o]));
-  const worst = replay.metrics.disagreements.map(
-    (d) => `#${d.offerId} ${byId.get(d.offerId)?.title ?? ""}: uživatel „${LABEL_CS[d.label]}“, model skóre ${d.score}`,
-  );
+  // The measured set can be wider than what the model saw; never leak held-out ids into the prompt.
+  const worst = replay.metrics.disagreements
+    .filter((d) => byId.has(d.offerId))
+    .map(
+      (d) => `#${d.offerId} ${byId.get(d.offerId)?.title ?? ""}: uživatel „${LABEL_CS[d.label]}“, model skóre ${d.score}`,
+    );
   return [
     "Jsi asistent, který ladí bodovací profil kandidáta. Profil (níže) čte jiný model a podle něj hodnotí pracovní nabídky 0–10.",
     "Uživatel ohodnotil nabídky vlastním verdiktem. Navrhni upravený celý profil tak, aby skóre lépe odpovídalo jeho verdiktům.",
@@ -94,18 +103,62 @@ function parseReply(body: string): ProposalReply {
   return { profile: r.profile, rationale: r.rationale, changes: r.changes };
 }
 
-async function replayAll(db: Database, opts: ReplayOptions): Promise<ReplayResult> {
-  const replay = await replayLabeled(db, opts);
+/** Subset twin of `replayLabeled` (null ids = all offers); a partial replay throws instead of mismeasuring. */
+async function replaySubset(db: Database, opts: ReplayOptions, ids: Set<number> | null): Promise<ReplayResult> {
+  const offers = labeledOffersToScore(db).filter((o) => ids === null || ids.has(o.id));
+  const client = {
+    endpoint: opts.endpoint,
+    model: opts.model,
+    profile: opts.profile,
+    maxDescriptionChars: opts.maxDescriptionChars,
+    apiKey: opts.apiKey,
+    sessionId: opts.sessionId,
+    postJson: opts.postJson ?? defaultPostJson,
+  };
+  const results: (ReplayItem | null)[] = offers.map(() => null);
+  const failed: ReplayResult["failed"] = [];
+  let promptTokens = 0;
+  let completionTokens = 0;
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < offers.length) {
+      const index = next;
+      next += 1;
+      const offer = offers[index]!;
+      try {
+        const r = await scoreOneOffer(client, offer);
+        results[index] = { offerId: offer.id, label: offer.label, score: r.score, verdict: r.verdict, reason: r.reason, gaps: r.gaps };
+        promptTokens += r.promptTokens;
+        completionTokens += r.completionTokens;
+      } catch (e) {
+        failed.push({ offerId: offer.id, label: offer.label, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, offers.length) }, () => worker()));
   // A partial replay compares different offer sets; no proposal is better than a wrongly measured one.
-  if (replay.failed.length > 0) {
-    throw new Error(`replay failed for ${replay.failed.length} offers: ${replay.failed[0]!.error}`);
+  if (failed.length > 0) {
+    throw new Error(`replay failed for ${failed.length} offers: ${failed[0]!.error}`);
   }
-  return replay;
+  const metrics = computeMetrics(
+    offers.map((o, i) => ({ offerId: o.id, label: o.label, score: results[i]?.score ?? null, verdict: results[i]?.verdict ?? null })),
+  );
+  return { items: results.filter((r): r is ReplayItem => r !== null), failed, promptTokens, completionTokens, metrics };
 }
 
 /** Proposed metric strictly below the current one; null proposed counts as worse. */
 const worse = (current: number | null, proposed: number | null): boolean =>
   current !== null && (proposed === null || proposed < current);
+
+/** Stable hold-out bucket for an honest delta; null when the data is too thin (callers fall back to in-sample). */
+function pickHoldout(offers: LabeledOffer[]): Set<number> | null {
+  if (offers.length < HOLDOUT_MIN_LABELS) return null;
+  const held = offers.filter((o) => o.offerId % HOLDOUT_MODULO === 0);
+  const positives = held.filter((o) => o.label === "positive").length;
+  const negatives = held.filter((o) => o.label === "negative").length;
+  if (positives < MIN_PER_CLASS || negatives < MIN_PER_CLASS) return null;
+  return new Set(held.map((o) => o.offerId));
+}
 
 /** Proposes a revised profile from the user's labels and measures it; writes a proposal file unless it changes nothing. */
 export async function generateProposal(db: Database, opts: GenerateOptions): Promise<GenerateResult> {
@@ -132,11 +185,14 @@ export async function generateProposal(db: Database, opts: GenerateOptions): Pro
     sessionId: opts.sessionId,
     postJson,
   });
-  const current = await replayAll(db, replayOpts(opts.profile));
+  // Honest delta: with enough labels the model sees only training offers; both replays measure the hold-out.
+  const holdout = pickHoldout(offers);
+  const train = holdout === null ? offers : offers.filter((o) => !holdout.has(o.offerId));
+  const current = await replaySubset(db, replayOpts(opts.profile), holdout);
 
   const request = {
     model: opts.model,
-    input: [{ role: "user", content: [{ type: "input_text", text: buildPrompt(opts.profile, offers, current) }] }],
+    input: [{ role: "user", content: [{ type: "input_text", text: buildPrompt(opts.profile, train, current) }] }],
     text: { format: { type: "json_schema", name: "profile_proposal", schema: PROPOSAL_SCHEMA } },
   };
   const res = await postJson(opts.endpoint, request, opts.apiKey, opts.sessionId);
@@ -146,7 +202,7 @@ export async function generateProposal(db: Database, opts: GenerateOptions): Pro
     return { kind: "unchanged", message: "the model proposed no change to the profile", current: summarize(current.metrics) };
   }
 
-  const proposed = await replayAll(db, replayOpts(reply.profile));
+  const proposed = await replaySubset(db, replayOpts(reply.profile), holdout);
   const metrics = { current: summarize(current.metrics), proposed: summarize(proposed.metrics) };
   const discarded =
     worse(metrics.current.auc, metrics.proposed.auc) || worse(metrics.current.precisionAt5, metrics.proposed.precisionAt5);
@@ -161,6 +217,7 @@ export async function generateProposal(db: Database, opts: GenerateOptions): Pro
     baseProfile: opts.profile,
     profile: reply.profile,
     metrics,
+    evaluation: { kind: holdout === null ? "in-sample" : "holdout", n: current.metrics.n },
   };
   return { kind: "created", proposal, path: saveProposal(proposal) };
 }

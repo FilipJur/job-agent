@@ -27,7 +27,13 @@ export function printResult(result: GenerateResult): void {
     return;
   }
   printComparison(result.proposal.metrics.current, result.proposal.metrics.proposed);
-  console.log(`\ntune: proposal ${result.proposal.id} is ${result.proposal.status}; wrote ${result.path}`);
+  const evaluation = result.proposal.evaluation;
+  console.log(
+    evaluation?.kind === "holdout"
+      ? `měřeno na odložených ${evaluation.n} štítcích`
+      : "měřeno na stejných štítcích (málo dat, odhad je optimistický)",
+  );
+  console.log(`tune: proposal ${result.proposal.id} is ${result.proposal.status}; wrote ${result.path}`);
 }
 
 async function main(argv: string[]): Promise<void> {

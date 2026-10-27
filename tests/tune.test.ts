@@ -140,4 +140,39 @@ describe("generateProposal", () => {
     expect(JSON.parse(readFileSync(result.path, "utf8")).status).toBe(status);
     expect(readdirSync(process.env.PROPOSALS_DIR!)).toEqual(["2026-10-27T10-00-00Z.json"]);
   });
+
+  test("hold-out: the prompt hides held-out offers and replays measure only them", async () => {
+    for (let i = 0; i < 30; i += 1) label(`offer ${i}`, i < 15 ? "up" : "down");
+    const ids = db.query<{ id: number }, []>("SELECT id FROM offers ORDER BY id").all().map((r) => r.id);
+    const held = new Set(ids.filter((id) => id % 3 === 0));
+    expect(held.size).toBe(10);
+    let prompt = "";
+    const scored = new Set<number>();
+    const idOfTitle = new Map(ids.map((id, i) => [`offer ${i}`, id]));
+    const postJson: PostJson = async (_url, body) => {
+      const b = body as { text?: { format?: { name?: string } }; input: { content: { text: string }[] }[] };
+      if (b.text?.format?.name === "profile_proposal") {
+        prompt = b.input[0]!.content[0]!.text;
+        return reply({ profile: "PROPOSED", rationale: ["r"], changes: ["c"] });
+      }
+      const text = b.input[0]!.content[0]!.text;
+      const title = text.split("\n").find((l) => l.startsWith("Název: "))!.slice("Název: ".length);
+      scored.add(idOfTitle.get(title)!);
+      const good = Number(title.split(" ")[1]!) < 15;
+      const score = text.startsWith("PROPOSED") ? (good ? 9 : 1) : good ? 8 : 2;
+      return reply({ verdict: "fit", score, reason: "r", gaps: "", blocker: "", direction: "", labels: [] });
+    };
+    const result = await run(postJson);
+    if (result.kind !== "created") throw new Error(result.kind);
+    expect(result.proposal.evaluation).toEqual({ kind: "holdout", n: held.size });
+    for (const id of held) expect(prompt).not.toContain(`#${id} `);
+    expect(scored).toEqual(held);
+  });
+
+  test("below the hold-out threshold: in-sample with an honest flag", async () => {
+    labelSet(6, 6);
+    const result = await run(fakeApi(9, 1).postJson);
+    if (result.kind !== "created") throw new Error(result.kind);
+    expect(result.proposal.evaluation).toEqual({ kind: "in-sample", n: 12 });
+  });
 });
