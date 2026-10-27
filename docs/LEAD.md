@@ -10,7 +10,10 @@ Read this before dispatching any worker. The lead plans, spawns, watches, review
 | 1 | Lead (any `omp` started in the repo) | `default` → `anthropic/claude-opus-5-5` | — |
 | 2 | Worker: backend, data, collectors | `worker` → `opencode-go/muse-spark-1.3-contributor` | `anthropic/claude-sonnet-5-5` |
 | 2 | UI worker: `web/**` | `ui` → `anthropic/claude-sonnet-5-5` | — |
-| 3 | Helpers: `scout`, `reviewer`, `sonic`, `task` subagents, the advisor | `task` / `advisor` → `opencode-go/deepseek-v4.1-flash` | `anthropic/claude-haiku-5-5` |
+| 3 | Helpers: `scout`, `reviewer`, `sonic`, `task` subagents | `task` → `opencode-go/deepseek-v4.1-flash` | `anthropic/claude-haiku-5-5` |
+| — | Worker advisor "Lead rules" (reviews, never edits) | `advisor` → `anthropic/claude-opus-5-5:medium`, every 4th worker turn | — |
+
+The advisor is a big model on purpose: a reviewer weaker than the worker misses what matters. Its cost comes from cadence (it re-reads its whole context per review), so keep `reviewInterval` ≥ 4 and effort `medium`; it shares the lead's Claude quota.
 
 - Start the lead from the repo (`cd ~/projects/job-agent && omp`): only there it gets Opus, the project agents in `.omp/agents` and the isolation settings. A session started elsewhere sees none of them.
 - Read-only research goes to `scout`, reviews to `reviewer`, never to the generic `task` agent.

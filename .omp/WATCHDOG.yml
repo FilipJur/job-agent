@@ -1,10 +1,13 @@
 # Advisor roster for job-agent. Applies to sessions with an advisor: the native `worker` and
 # `ui-worker` agents opt in via `advisor: true`. Guidance: .omp/WATCHDOG.md. Docs: docs/LEAD.md.
+# Cost: an advisor re-reads its whole context on every review, so cadence drives usage.
+# Every 4th turn still catches a polling loop or scope drift within a few rounds.
+maxNotesPerUpdate: 2
 advisors:
   - name: Lead rules
     model: "@advisor"
     reviewMode: turn
-    reviewInterval: 3
+    reviewInterval: 4
     syncBacklog: off
     instructions: |
       Enforce the task's file set and the worker rules. Silence is the default; one note per real problem.

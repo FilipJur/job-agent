@@ -3,7 +3,9 @@
 #   1. lead:     default -> Claude Opus 5.5 (any `omp` started in this repo)
 #   2. workers:  worker  -> Muse Spark 1.3 Contributor (backend, data, collectors)
 #                ui      -> Claude Sonnet 5.5 (web/**)
-#   3. helpers:  task    -> DeepSeek V4.1 Flash (scout, reviewer, sonic, task subagents, advisor)
+#   3. helpers:  task    -> DeepSeek V4.1 Flash (scout, reviewer, sonic, task subagents)
+# The worker advisor is a reviewer, not a helper: advisor -> Claude Opus 5.5 at medium effort,
+# reviewing every 4th worker turn (.omp/WATCHDOG.yml); it shares the lead's Claude quota.
 # Native workers are the agents in .omp/agents; Ghostty workers get the worker model from scripts/spawn-worker.sh.
 modelRoles:
   default: anthropic/claude-opus-5-5
@@ -11,7 +13,7 @@ modelRoles:
   ui: anthropic/claude-sonnet-5-5
   task: opencode-go/deepseek-v4.1-flash
   smol: opencode-go/deepseek-v4.1-flash
-  advisor: opencode-go/deepseek-v4.1-flash:high
+  advisor: anthropic/claude-opus-5-5:medium
 retry:
   modelFallback: true
   fallbackChains:
