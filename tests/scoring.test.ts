@@ -32,7 +32,7 @@ function offer(): number {
 const envelope = (content: string): string =>
   JSON.stringify({ choices: [{ message: { content } }], usage: { prompt_tokens: 10, completion_tokens: 5 } });
 
-const validContent = JSON.stringify({ score: 7, reason: "Dobrý fit.", gaps: "", labels: ["remote-cz", "bogus"] });
+const validContent = JSON.stringify({ verdict: "fit", score: 7, reason: "Dobrý fit.", gaps: "", blocker: "", direction: "", labels: ["remote-cz", "bogus"] });
 
 function sequenced(bodies: string[]): PostJson {
   let i = 0;
@@ -87,9 +87,12 @@ describe("scoring", () => {
 
   test("unknown labels are dropped", () => {
     expect(parseScoreReply(validContent)).toEqual({
+      verdict: "fit",
       score: 7,
       reason: "Dobrý fit.",
       gaps: "",
+      blocker: "",
+      direction: "",
       labels: ["remote-cz"],
     });
   });

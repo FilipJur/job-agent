@@ -80,6 +80,9 @@ export async function runScoring(db: Database, opts: RunScoringOptions): Promise
           profileHash,
           scoredAt: now(),
           labels: r.labels,
+          verdict: r.verdict,
+          blocker: r.blocker,
+          direction: r.direction,
         });
         scored += 1;
         promptTokens += r.promptTokens;

@@ -5,9 +5,12 @@ import { SCORING_TIMEOUT_MS } from "./config";
 export const LLM_LABELS = ["remote-cz", "remote-eu", "ai-first"] as const;
 
 export interface ScoreResult {
+  verdict: "fit" | "blocked" | "aspiration";
   score: number;
   reason: string;
   gaps: string;
+  blocker: string;
+  direction: string;
   labels: string[];
   promptTokens: number;
   completionTokens: number;
@@ -51,16 +54,18 @@ const JSON_SCHEMA_FORMAT = {
   type: "json_schema",
   json_schema: {
     name: "offer_score",
-    strict: true,
     schema: {
       type: "object",
       properties: {
+        verdict: { type: "string", enum: ["fit", "blocked", "aspiration"] },
         score: { type: "number", minimum: 0, maximum: 10 },
         reason: { type: "string" },
         gaps: { type: "string" },
+        blocker: { type: "string" },
+        direction: { type: "string" },
         labels: { type: "array", items: { type: "string", enum: [...LLM_LABELS] } },
       },
-      required: ["score", "reason", "gaps", "labels"],
+      required: ["verdict", "score", "reason", "gaps", "blocker", "direction", "labels"],
       additionalProperties: false,
     },
   },
@@ -74,20 +79,25 @@ export function buildUserMessage(offer: OfferToScore, maxDescriptionChars: numbe
     `Firma: ${offer.company ?? "neuvedena"}`,
     `Lokalita: ${offer.locationText ?? offer.city ?? "neuvedena"}`,
     `Pracoviště: ${offer.workplace}`,
-    `Štítky: ${offer.labels.length > 0 ? offer.labels.join(", ") : "žádné"}`,
     `Popis: ${offer.description.slice(0, maxDescriptionChars)}`,
     `Ohodnoť tuto nabídku podle profilu v systémové zprávě. Odpověz pouze JSON objektem ` +
-      `{"score": number 0-10, "reason": string, "gaps": string, "labels": string[]}, ` +
-      `kde reason je jedna věta česky, gaps je stručně česky co kandidátovi chybí ("" pokud nic) ` +
+      `{"verdict": "fit"|"blocked"|"aspiration", "score": number 0-10, "reason": string, "gaps": string, "blocker": string, "direction": string, "labels": string[]}. ` +
+      `Verdikt: "fit" = akční nabídka; "blocked" = teď nepoužitelná (onsite mimo Olomouc/okolí bez remote, nutná relokace/víza mimo EU, vyloučená oblast) — pak uveď blocker jednou větou česky a direction prázdné; ` +
+      `"aspiration" = technicky skvělý fit (7+), ale teď nepoužitelná okolnostmi — pak uveď direction (kam směřovat / co se naučit, česky) a blocker stručně; ` +
+      `u "fit" jsou blocker i direction prázdné. ` +
+      `reason je jedna věta česky, gaps je stručně česky co kandidátovi chybí ("" pokud nic) ` +
       `a labels obsahuje pouze hodnoty z ${JSON.stringify([...LLM_LABELS])}.`,
   ];
   return lines.join("\n");
 }
 
 interface ParsedReply {
+  verdict: "fit" | "blocked" | "aspiration";
   score: number;
   reason: string;
   gaps: string;
+  blocker: string;
+  direction: string;
   labels: string[];
 }
 
@@ -101,18 +111,26 @@ export function parseScoreReply(text: string): ParsedReply {
   }
   if (typeof obj !== "object" || obj === null) throw new Error("reply is not an object");
   const r = obj as Record<string, unknown>;
+  if (r.verdict !== "fit" && r.verdict !== "blocked" && r.verdict !== "aspiration") {
+    throw new Error(`invalid verdict: ${JSON.stringify(r.verdict)}`);
+  }
   if (typeof r.score !== "number" || !Number.isFinite(r.score) || r.score < 0 || r.score > 10) {
     throw new Error(`invalid score: ${JSON.stringify(r.score)}`);
   }
   if (typeof r.reason !== "string" || r.reason.trim().length === 0) throw new Error("missing reason");
   if (typeof r.gaps !== "string") throw new Error("missing gaps");
+  if (typeof r.blocker !== "string") throw new Error("missing blocker");
+  if (typeof r.direction !== "string") throw new Error("missing direction");
   if (!Array.isArray(r.labels)) throw new Error("missing labels");
-  const allowed = new Set<string>(LLM_LABELS);
+  const allowed: Record<string, true> = { "remote-cz": true, "remote-eu": true, "ai-first": true };
   return {
+    verdict: r.verdict,
     score: r.score,
     reason: r.reason,
     gaps: r.gaps,
-    labels: r.labels.filter((l): l is string => typeof l === "string" && allowed.has(l)),
+    blocker: r.blocker,
+    direction: r.direction,
+    labels: r.labels.filter((l): l is string => typeof l === "string" && allowed[l] === true),
   };
 }
 

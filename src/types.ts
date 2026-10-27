@@ -62,6 +62,9 @@ export interface OfferScore {
   gaps: string;
   model: string;
   scoredAt: string;
+  verdict: ScoreVerdict;
+  blocker: string;
+  direction: string;
 }
 
 export interface OfferFeedback {
@@ -69,6 +72,9 @@ export interface OfferFeedback {
   reason: string | null;
   createdAt: string;
 }
+
+/** What the model decided about an offer: fit = actionable, blocked = unusable now, aspiration = great fit, wrong timing/place. */
+export type ScoreVerdict = "fit" | "blocked" | "aspiration";
 
 export interface OfferRow {
   id: number;
@@ -98,6 +104,9 @@ export interface ScoreInput {
   profileHash: string;
   scoredAt: string;
   labels?: string[];
+  verdict: ScoreVerdict;
+  blocker: string;
+  direction: string;
 }
 
 export interface OfferToScore {

@@ -131,14 +131,22 @@ describe("offersToScore", () => {
 
   test("saveScore stores the row and llm labels; saveFeedback stores the verdict", () => {
     const id = offer();
-    saveScore(db, { offerId: id, score: 7.5, reason: "r", gaps: "g", model: "m", profileHash: "p1", scoredAt: "2026-10-26T11:00:00.000Z", labels: ["ai-first"] });
+    saveScore(db, { offerId: id, score: 7.5, reason: "r", gaps: "g", model: "m", profileHash: "p1", scoredAt: "2026-10-26T11:00:00.000Z", labels: ["ai-first"], verdict: "fit", blocker: "", direction: "" });
     saveFeedback(db, id, "up", "good");
 
     const rows = listOffers(db, { tab: "hpp" });
-    expect(rows[0]!.score).toMatchObject({ score: 7.5, reason: "r", gaps: "g", model: "m" });
+    expect(rows[0]!.score).toMatchObject({ score: 7.5, reason: "r", gaps: "g", model: "m", verdict: "fit", blocker: "", direction: "" });
     expect(rows[0]!.feedback).toMatchObject({ verdict: "up", reason: "good" });
     expect(rows[0]!.labels).toContain("ai-first");
     expect(offersToScore(db, { profileHash: "p1" })).toHaveLength(0);
+  });
+
+  test("blocked offers are hidden until a newer fit score replaces them", () => {
+    const id = offer();
+    saveScore(db, { offerId: id, score: 3, reason: "r", gaps: "g", model: "m", profileHash: "p1", scoredAt: "2026-10-26T11:00:00.000Z", verdict: "blocked", blocker: "onsite NYC", direction: "" });
+    expect(listOffers(db, { tab: "hpp" })).toHaveLength(0);
+    saveScore(db, { offerId: id, score: 8, reason: "r", gaps: "g", model: "m", profileHash: "p1", scoredAt: "2026-10-26T12:00:00.000Z", verdict: "fit", blocker: "", direction: "" });
+    expect(listOffers(db, { tab: "hpp" })).toHaveLength(1);
   });
 });
 

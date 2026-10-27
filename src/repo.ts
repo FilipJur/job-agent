@@ -8,6 +8,7 @@ import type {
   OfferRow,
   OfferToScore,
   ScoreInput,
+  ScoreVerdict,
   Tab,
   Verdict,
   Workplace,
@@ -36,9 +37,12 @@ const FORM_LABELS = "('hpp', 'ico', 'freelance', 'dpp-dpc')";
 const NOT_EXCLUDED = "NOT EXISTS (SELECT 1 FROM offer_labels l WHERE l.offer_id = o.id AND l.label = 'excluded')";
 const HPP_COND = `(EXISTS (SELECT 1 FROM offer_labels l WHERE l.offer_id = o.id AND l.label = 'hpp') OR NOT EXISTS (SELECT 1 FROM offer_labels l WHERE l.offer_id = o.id AND l.label IN ${FORM_LABELS}))`;
 const CONTRACT_COND = "EXISTS (SELECT 1 FROM offer_labels l WHERE l.offer_id = o.id AND l.label IN ('ico', 'freelance', 'dpp-dpc'))";
+/** Latest score per offer (the same row `listOffers` reads). */
 const LATEST_SCORE_JOIN = `LEFT JOIN offer_scores s ON s.offer_id = o.id AND NOT EXISTS (
     SELECT 1 FROM offer_scores s2 WHERE s2.offer_id = o.id
       AND (s2.scored_at > s.scored_at OR (s2.scored_at = s.scored_at AND s2.id > s.id)))`;
+/** Offers blocked by their latest score never appear in the HPP/Kontrakty tabs. IS DISTINCT FROM keeps unscored offers. */
+const NOT_BLOCKED = "s.verdict IS DISTINCT FROM 'blocked'";
 const LATEST_FEEDBACK_JOIN = `LEFT JOIN feedback f ON f.offer_id = o.id AND NOT EXISTS (
     SELECT 1 FROM feedback f2 WHERE f2.offer_id = o.id
       AND (f2.created_at > f.created_at OR (f2.created_at = f.created_at AND f2.id > f.id)))`;
@@ -62,14 +66,17 @@ interface OfferQueryRow {
   gaps: string | null;
   model: string | null;
   scored_at: string | null;
+  score_verdict: ScoreVerdict | null;
+  blocker: string | null;
+  direction: string | null;
   verdict: Verdict | null;
   feedback_reason: string | null;
   feedback_at: string | null;
 }
 
-/** Offers for one UI tab: score desc, unscored last, then newest first. */
+/** Offers for one UI tab: score desc, unscored last, then newest first. Blocked offers are hidden. */
 export function listOffers(db: Database, q: ListOffersQuery): OfferRow[] {
-  const where: string[] = [NOT_EXCLUDED, q.tab === "hpp" ? HPP_COND : CONTRACT_COND];
+  const where: string[] = [NOT_EXCLUDED, NOT_BLOCKED, q.tab === "hpp" ? HPP_COND : CONTRACT_COND];
   if (!q.includeHidden) where.push("(f.id IS NULL OR f.verdict != 'hidden')");
   if (q.onlyNew) where.push("o.first_seen_at >= strftime('%Y-%m-%dT%H:%M:%S', 'now', '-1 day')");
   if (q.remote)
@@ -85,7 +92,7 @@ export function listOffers(db: Database, q: ListOffersQuery): OfferRow[] {
     .query<OfferQueryRow, []>(
       `SELECT o.id, o.source, o.url, o.title, o.company, o.city, o.workplace,
         o.salary_min, o.salary_max, o.currency, o.published_at, o.first_seen_at, o.partial,
-        s.score, s.reason, s.gaps, s.model, s.scored_at,
+        s.score, s.reason, s.gaps, s.model, s.scored_at, s.verdict AS score_verdict, s.blocker, s.direction,
         f.verdict, f.reason AS feedback_reason, f.created_at AS feedback_at
       FROM offers o
       ${LATEST_SCORE_JOIN}
@@ -113,7 +120,16 @@ export function listOffers(db: Database, q: ListOffersQuery): OfferRow[] {
     score:
       r.score === null
         ? null
-        : { score: r.score, reason: r.reason ?? "", gaps: r.gaps ?? "", model: r.model ?? "", scoredAt: r.scored_at ?? "" },
+        : {
+            score: r.score,
+            reason: r.reason ?? "",
+            gaps: r.gaps ?? "",
+            model: r.model ?? "",
+            scoredAt: r.scored_at ?? "",
+            verdict: r.score_verdict ?? "fit",
+            blocker: r.blocker ?? "",
+            direction: r.direction ?? "",
+          },
     feedback:
       r.verdict === null ? null : { verdict: r.verdict, reason: r.feedback_reason, createdAt: r.feedback_at ?? "" },
   }));
@@ -184,11 +200,11 @@ function labelsByOffer(db: Database, ids: number[]): Map<number, string[]> {
 /** Appends a score; optional new labels are stored with origin 'llm'. */
 export function saveScore(db: Database, s: ScoreInput): void {
   const insertScore = db.prepare(
-    "INSERT INTO offer_scores (offer_id, score, reason, gaps, model, profile_hash, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO offer_scores (offer_id, score, reason, gaps, model, profile_hash, verdict, blocker, direction, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   );
   const insertLabel = db.prepare("INSERT OR IGNORE INTO offer_labels (offer_id, label, origin) VALUES (?, ?, 'llm')");
   db.transaction(() => {
-    insertScore.run(s.offerId, s.score, s.reason, s.gaps, s.model, s.profileHash, s.scoredAt);
+    insertScore.run(s.offerId, s.score, s.reason, s.gaps, s.model, s.profileHash, s.verdict, s.blocker, s.direction, s.scoredAt);
     for (const label of s.labels ?? []) insertLabel.run(s.offerId, label);
   })();
 }

@@ -55,9 +55,13 @@ CREATE TABLE IF NOT EXISTS offer_scores (
   gaps         TEXT NOT NULL,
   model        TEXT NOT NULL,
   profile_hash TEXT NOT NULL,
+  verdict      TEXT NOT NULL DEFAULT 'fit' CHECK (verdict IN ('fit', 'blocked', 'aspiration')),
+  blocker      TEXT,
+  direction    TEXT,
   scored_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_offer_scores_offer ON offer_scores (offer_id);
+CREATE INDEX IF NOT EXISTS idx_offer_scores_verdict ON offer_scores (offer_id, verdict);
 
 CREATE TABLE IF NOT EXISTS feedback (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,5 +129,8 @@ export function openDb(path: string): Database {
   addColumnIfMissing(db, "agencies", "rate_min_czk", "INTEGER");
   addColumnIfMissing(db, "agencies", "rate_max_czk", "INTEGER");
   addColumnIfMissing(db, "agencies", "crawled_at", "TEXT");
+  addColumnIfMissing(db, "offer_scores", "verdict", "TEXT NOT NULL DEFAULT 'fit' CHECK (verdict IN ('fit', 'blocked', 'aspiration'))");
+  addColumnIfMissing(db, "offer_scores", "blocker", "TEXT");
+  addColumnIfMissing(db, "offer_scores", "direction", "TEXT");
   return db;
 }
