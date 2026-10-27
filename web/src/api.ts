@@ -1,12 +1,5 @@
 import type { AgencyPatch, AgencyRow, OfferRow, Tab, Verdict } from "./types";
 
-export interface OfferFilters {
-  onlyNew: boolean;
-  remote: boolean;
-  olomouc: boolean;
-  hidden: boolean;
-}
-
 export interface AspirationRow {
   id: number;
   title: string;
@@ -22,6 +15,13 @@ export interface AspirationRow {
   labels: string[];
   model: string;
   scoredAt: string;
+}
+
+export interface OfferFilters {
+  onlyNew: boolean;
+  remote: boolean;
+  olomouc: boolean;
+  hidden: boolean;
 }
 
 export async function fetchAspirations(signal: AbortSignal): Promise<AspirationRow[]> {
