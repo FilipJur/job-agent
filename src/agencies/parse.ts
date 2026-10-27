@@ -1,8 +1,16 @@
 /** Pure text analysis for the agency website crawl: IČO-hiring evidence and hourly rates. */
 
-const ICO_RE = /\b(ičo|živnost\w*|osvč|freelance\w*|externí\s+spolupr\w+|externist\w*|subdodavatel\w*)\b/i;
+/** \b is ASCII-only (no boundary before "ž"), so IČO-term boundaries list Czech letters explicitly. */
+const W = "A-Za-z0-9_áčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ";
+const ICO_RE = new RegExp(
+  `(?<![${W}])(ičo|živnost\\w*|osvč|freelance\\w*|externí\\s+spolupr\\w+|externist\\w*|subdodavatel\\w*)(?![${W}])`,
+  "i",
+);
 
 const HIRE_RE = /(hled[áa]\w*|p[řr]idej\w*|nab[íi]r[áa]\w*|nab[íi]z\w*|voln\w*\s+pozic\w+|spolupr\w*)/i;
+
+/** Previous line gives an offer-list context ("Co nabízíme"), so the IČO line needs no hiring verb. */
+const OFFER_CTX_RE = /(co\s+nab[íi]z\w*|nab[íi]z\w*me|benefit\w*|oček[áa]v\w*me|požaduj\w*me|popis\s+pozic\w*)/i;
 
 /** Generic "we work with freelancers" with no open call: must not count as hiring. */
 const GENERIC_COOP_RE = /\bspolupracujeme\s+s\b/i;
@@ -34,10 +42,11 @@ function decodeEntities(s: string): string {
   });
 }
 
-/** HTML → plain text, keeping block boundaries as newlines for sentence splitting. */
+/** HTML → plain text. Each list item becomes its own line so offer bullets stay separate. */
 export function pageText(html: string): string {
   const withoutBoilerplate = html.replace(/<(script|style|noscript|header|footer|nav)[^>]*>[\s\S]*?<\/\1>/gi, "\n");
   const withBreaks = withoutBoilerplate
+    .replace(/<\/(li|ul|ol)>/gi, "\n")
     .replace(/<(br|p|div|h[1-6]|li|tr|section|article|blockquote)[^>]*>/gi, "\n")
     .replace(/<[^>]*>/g, " ");
   return decodeEntities(withBreaks)
@@ -62,11 +71,24 @@ export function splitSentences(text: string): string[] {
   );
 }
 
-/** First sentence proving an open IČO/freelance call, or null. */
+/**
+ * First evidence of an open IČO/freelance call, or null. Single lines match first
+ * (exact sentence); adjacent lines pair up only for split list items like
+ * "Co nabízíme" + "Práci na HPP nebo živnost". A generic "spolupracujeme
+ * s freelancery" anywhere in the candidate vetoes it.
+ */
 export function findHiringEvidence(text: string): string | null {
-  for (const s of splitSentences(text)) {
-    if (s.length > 2000 || GENERIC_COOP_RE.test(s)) continue;
-    if (ICO_RE.test(s) && HIRE_RE.test(s)) return s.length > 200 ? `${s.slice(0, 199)}…` : s;
+  const lines = splitSentences(text);
+  for (const line of lines) {
+    if (line.length > 2000 || GENERIC_COOP_RE.test(line)) continue;
+    if (ICO_RE.test(line) && HIRE_RE.test(line)) return line.length > 200 ? `${line.slice(0, 199)}…` : line;
+  }
+  for (let i = 0; i + 1 < lines.length; i++) {
+    const [prev = "", cur = ""] = [lines[i], lines[i + 1]];
+    if (!ICO_RE.test(cur)) continue;
+    const pair = `${prev} ${cur}`;
+    if (pair.length > 2000 || GENERIC_COOP_RE.test(pair)) continue;
+    if (HIRE_RE.test(pair) || OFFER_CTX_RE.test(prev)) return pair.length > 200 ? `${pair.slice(0, 199)}…` : pair;
   }
   return null;
 }

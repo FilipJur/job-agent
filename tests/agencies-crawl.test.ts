@@ -31,7 +31,7 @@ describe("agencies-crawl", () => {
     expect(outcome.crawl.crawledAt).toBe("2026-10-27T00:00:00.000Z");
   });
 
-  test("HPP-only page plus generic freelancer mention yields hiring false", async () => {
+  test("HPP-only page yields hiring false", async () => {
     const html = await fixture("kariera-hpp.html");
     const origin = "https://example.cz";
     const outcome = await crawlAgency(
@@ -41,6 +41,18 @@ describe("agencies-crawl", () => {
     );
     expect(outcome.crawl.hiringIco).toBe(false);
     expect(outcome.crawl.hiringEvidence).toBeNull();
+  });
+
+  test("list-item offer ('Co nabízíme' + 'Práci na HPP nebo živnost') counts", async () => {
+    const origin = "https://example.cz";
+    const html = `<html><body><h4>Co nabízíme</h4><ul><li>Práci na hlavní pracovní poměr nebo živnost</li><li>Možnost full-time i part-time spolupráce</li></ul></body></html>`;
+    const outcome = await crawlAgency(
+      fakeFetch({ [`${origin}/robots.txt`]: "User-agent: *\nDisallow:\n", [`${origin}/kariera`]: html }),
+      { id: 1, name: "Example", web: origin },
+      "2026-10-27T00:00:00.000Z",
+    );
+    expect(outcome.crawl.hiringIco).toBe(true);
+    expect(outcome.crawl.hiringEvidence).toContain("živnost");
   });
 
   test("rate formats: careers vs pricing context", async () => {

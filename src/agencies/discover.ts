@@ -57,6 +57,16 @@ export async function discoverPages(fetchText: FetchText, web: string): Promise<
   };
 
   const origin = new URL(web).origin;
+  /** Same site under the www variant (or vice versa); cross-domain links still excluded. */
+  const sameSite = (url: string): boolean => {
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      const base = new URL(origin).hostname.toLowerCase();
+      return host === base || host === `www.${base}` || base === `www.${host}`;
+    } catch {
+      return false;
+    }
+  };
   const get = async (url: string): Promise<{ body: string } | null> => {
     try {
       const res = await fetchText(url);
@@ -77,7 +87,7 @@ export async function discoverPages(fetchText: FetchText, web: string): Promise<
           if (isSitemapIndex(sm.body)) {
             for (const child of sitemapLocs(sm.body).slice(0, 8)) {
               const childUrl = resolveUrl(loc, child);
-              if (!childUrl || !childUrl.startsWith(origin)) continue;
+              if (!childUrl || !sameSite(childUrl)) continue;
               const sub = await get(childUrl);
               if (sub) for (const l of sitemapLocs(sub.body)) push(resolveUrl(childUrl, l) ?? "");
             }
@@ -94,7 +104,7 @@ export async function discoverPages(fetchText: FetchText, web: string): Promise<
     if (isSitemapIndex(main.body)) {
       for (const child of sitemapLocs(main.body).slice(0, 8)) {
         const childUrl = resolveUrl(`${origin}/sitemap.xml`, child);
-        if (!childUrl || !childUrl.startsWith(origin)) continue;
+        if (!childUrl || !sameSite(childUrl)) continue;
         const sub = await get(childUrl);
         if (!sub || isSitemapIndex(sub.body)) continue;
         for (const l of sitemapLocs(sub.body)) push(resolveUrl(childUrl, l) ?? "");
@@ -104,6 +114,11 @@ export async function discoverPages(fetchText: FetchText, web: string): Promise<
     }
   }
 
-  if (found.length === 0) for (const p of FALLBACK_PATHS) push(`${origin}${p}`);
+  // Fallbacks try both the web origin and its www variant: sitemap-less sites
+  // often serve on only one of them; record mode caches each exact URL string.
+  if (found.length === 0) {
+    const alt = origin.includes("://www.") ? origin.replace("://www.", "://") : origin.replace("://", "://www.");
+    for (const base of [origin, alt]) for (const p of FALLBACK_PATHS) push(`${base}${p}`);
+  }
   return found;
 }
