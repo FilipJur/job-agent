@@ -52,7 +52,9 @@ const STOPWORDS: Record<string, true> = {
   zpet: true,
 };
 
-const stem = (word: string): string => (word.length >= 5 ? word.slice(0, 5) : word);
+/** Same word up to inflection: 5-letter prefix, or 4 shared letters for longer words (`astro`/`astrem`). */
+const sameWord = (a: string, b: string): boolean =>
+  a.slice(0, 5) === b.slice(0, 5) || (a.length >= 5 && b.length >= 5 && a.slice(0, 4) === b.slice(0, 4));
 
 export function significantWords(text: string): string[] {
   return fold(text)
@@ -129,9 +131,9 @@ export function validateSentences(facts: Fact[], raw: RawSentence[]): Validation
         drop(`číslo ${unsupported.join(", ")} není v citovaných faktech`);
         continue;
       }
-      const citedWords = new Set(significantWords(citedText).map(stem));
+      const citedWords = significantWords(citedText);
       const words = significantWords(text);
-      if (words.length > 0 && !words.some((w) => citedWords.has(stem(w)))) {
+      if (words.length > 0 && !words.some((w) => citedWords.some((c) => sameWord(w, c)))) {
         drop("nesdílí žádné významné slovo s citovanými fakty");
         continue;
       }

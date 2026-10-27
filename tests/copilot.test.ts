@@ -8,6 +8,7 @@ const FACTS: Fact[] = [
   { id: "F2", text: "WordPress a WooCommerce: PHP, child themes, ACF." },
   { id: "F3", text: "Za sebou má 3,5 roku praxe s PHP." },
   { id: "F4", text: "AI-assisted vývoj: coding agenti, MCP, routování modelů." },
+  { id: "F5", text: "Astro." },
 ];
 
 const verdicts = (sentences: RawSentence[]): { kept: string[]; why: string[] } => {
@@ -45,6 +46,10 @@ describe("claim validation", () => {
     expect(verdicts([{ text: "Pracuji s Pythonem.", kind: "claim", facts: ["F2"] }]).kept).toEqual([]);
     expect(verdicts([{ text: "Dělám WordPress s ACF.", kind: "claim", facts: ["F2"] }]).kept).toEqual([
       "Dělám WordPress s ACF.",
+    ]);
+    // Inflection is not a different word: `Astrem` matches the fact `Astro`.
+    expect(verdicts([{ text: "Pracuji s Astrem.", kind: "claim", facts: ["F5"] }]).kept).toEqual([
+      "Pracuji s Astrem.",
     ]);
   });
 
