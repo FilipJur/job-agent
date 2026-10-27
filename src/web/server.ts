@@ -4,6 +4,7 @@ import { openDb } from "../db";
 import { readProfile, writeProfile } from "../profile";
 import { countOffersToScore, listAgencies, listOffers, saveFeedback, updateAgency } from "../repo";
 import { profileHashOf } from "../scoring/run";
+import { scoreModel } from "../scoring/config";
 import type { AgencyPatch, AgencyStatus } from "../types";
 
 /** Paths and values are fixed by the API contract in docs; keep them in one place. */
@@ -108,7 +109,7 @@ async function patchAgency(req: Request, db: Database, id: number): Promise<Resp
 
 function profileStatus(db: Database): Response {
   const text = readProfile();
-  return json({ text, pending: countOffersToScore(db, profileHashOf(text)) });
+  return json({ text, pending: countOffersToScore(db, profileHashOf(text, scoreModel())) });
 }
 
 async function putProfile(req: Request, db: Database): Promise<Response> {

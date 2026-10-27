@@ -1,9 +1,9 @@
 {
-  "model": "mimo-v2.6-flash",
+  "model": "muse-spark-1.3-contributor",
   "endpoint": "https://opencode.ai/zen/go/v1/chat/completions",
   "maxDescriptionChars": 4000,
   "prices": {
-    "inputPer1M": 0.14,
-    "outputPer1M": 0.28
+    "inputPer1M": 0.1,
+    "outputPer1M": 0.2
   }
 }

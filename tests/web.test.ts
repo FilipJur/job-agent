@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { openDb } from "../src/db";
 import { listAgencies, seedAgencies } from "../src/repo";
+import { scoreModel } from "../src/scoring/config";
 import { profileHashOf } from "../src/scoring/run";
 import { handle } from "../src/web/server";
 
@@ -125,7 +126,7 @@ describe("profile API", () => {
       const id = offer(["hpp"]);
       expect(await call("/api/profile")).toMatchObject({ status: 200, body: { text: "profile v1", pending: 1 } });
       expect(await send("PUT", "/api/profile", { text: "profile v2" })).toMatchObject({ status: 200, body: { text: "profile v2", pending: 1 } });
-      db.run("INSERT INTO offer_scores (offer_id, score, reason, gaps, model, profile_hash, scored_at) VALUES (?, 8, '', '', 't', ?, 't')", [id, profileHashOf("profile v2")]);
+      db.run("INSERT INTO offer_scores (offer_id, score, reason, gaps, model, profile_hash, scored_at) VALUES (?, 8, '', '', 't', ?, 't')", [id, profileHashOf("profile v2", scoreModel())]);
       expect(await call("/api/profile")).toMatchObject({ status: 200, body: { text: "profile v2", pending: 0 } });
       expect((await send("PUT", "/api/profile", {})).status).toBe(400);
       expect((await send("PUT", "/api/profile", { text: "  \n" })).status).toBe(400);

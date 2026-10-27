@@ -27,7 +27,9 @@ export interface ScoringSummary {
 
 const MAX_CONCURRENT_SCORES = 4;
 
-export const profileHashOf = (profile: string): string => createHash("sha256").update(profile).digest("hex");
+/** Score identity: the profile text plus the model that produced it. Same profile + different model = re-score. */
+export const profileHashOf = (profile: string, model?: string): string =>
+  createHash("sha256").update(profile + "\nmodel:" + (model ?? "")).digest("hex");
 
 /**
  * Scores offers missing a score for this profile hash, at most 4 LLM calls at a time.
@@ -35,7 +37,7 @@ export const profileHashOf = (profile: string): string => createHash("sha256").u
  */
 export async function runScoring(db: Database, opts: RunScoringOptions): Promise<{ summary: ScoringSummary; exitCode: number }> {
   const started = Date.now();
-  const profileHash = profileHashOf(opts.profile);
+  const profileHash = profileHashOf(opts.profile, opts.model);
   const offers = offersToScore(db, { profileHash, ...(opts.limit === undefined ? {} : { limit: opts.limit }) });
   const skippedRow = db
     .query<{ n: number }, [string]>(

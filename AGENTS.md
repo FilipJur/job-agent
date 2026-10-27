@@ -6,7 +6,7 @@ Goals, scope, sources and roadmap: `docs/VISION.md`. Read it before starting a s
 ## Stack
 - Bun + TypeScript (strict), SQLite via `bun:sqlite`, tests via `bun test`.
 - Web: React + Vite. No UI animation libraries until v0 is done.
-- LLM: OpenCode Go, OpenAI-compatible API, model `mimo-v2.6-flash`. Key from env `OPENCODE_GO_API_KEY`.
+- LLM: OpenCode Go, OpenAI-compatible API, model `muse-spark-1.3-contributor`. Key from env `OPENCODE_GO_API_KEY`.
 
 ## Commands
 - `bun install`
