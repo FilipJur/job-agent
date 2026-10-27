@@ -57,6 +57,23 @@ docker compose run --rm cli tune     # generate a proposal now, prints the metri
 
 Applying happens only in the Profil tab (`POST /api/proposals/:id/apply`); a proposal is refused when the profile was edited after it was made.
 
+## Morning digest
+
+`daily` builds the digest last (`src/digest/`), after scoring: new actionable
+offers, freshly crawled agency positions, a pending profile proposal and the
+Triáž backlog count. It writes `data/digest/YYYY-MM-DD.md` and advances
+`data/digest/last.json` (the next run's `since`; 24 h back when missing).
+A failure is printed and never fails the run. Test it with:
+
+```sh
+docker compose run --rm cli digest --dry-run   # prints the markdown, writes/pushes nothing
+```
+
+Opt-in push to a notification topic you own (to yourself only): set `NTFY_URL`
+(e.g. `https://ntfy.sh/<vas-soukromy-topic>`); `JOB_AGENT_URL` (optional) makes
+the notification link back to the UI. Push failures are printed with the URL
+redacted. Never set a shared topic — the push goes only to you.
+
 ## Access
 
 - This Mac: `http://localhost:3000`
