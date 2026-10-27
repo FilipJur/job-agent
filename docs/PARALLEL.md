@@ -4,8 +4,8 @@ Rules for running several agent sessions on this repo (Ghostty panes, one OMP se
 
 ## Roles
 - **User**: approves plans and merges, watches worker panes, answers workers that ask. At most one prompt in flight per file set.
-- **Lead** (exactly one): owns the slice plan and feature prompts, spawns and watches workers (`docs/LEAD.md`), owns the `main` branch (only the lead merges into it), resolves conflicts. Does not write feature code.
-- **Creep reviewer** (exactly one): reviews finished branches only for scope, test and complexity creep. May write fix prompts limited to that lens; before dispatching, checks with the lead that no other prompt targets the same files. Keeps the lead's context clean; does not merge.
+- **Lead** (exactly one): owns the slice plan and feature prompts, spawns, watches and audits workers (`docs/LEAD.md`), owns the `main` branch (only the lead merges into it), resolves conflicts. Does not write feature code, contracts included; the lead's own commits are merge fixes, docs and lead tooling.
+- **Reviewer** (a read-only `reviewer` subagent the lead starts per branch): checks the diff against the prompt for correctness gaps and scope creep, skips style, never edits or merges.
 - **Worker**: implements one prompt on its own branch, in the place named in the prompt. Never commits to `main`, never touches other worktrees.
 
 ## Where work happens
@@ -38,11 +38,11 @@ Reviewers only read (`git diff main...<branch>`, `git log`); no checkout, commit
 - A worker that needs a file outside its file set stops and reports instead of editing it.
 
 ## Integration (lead only)
-1. Review each branch (`git diff main...<branch>`, run tests where it was built).
-2. Merge into `main` one branch at a time, fast-forward or `--no-ff`; run `bun test && bun run typecheck` on the merged result after each merge (each branch passing alone does not prove the merge works).
+1. Review each branch: `bun scripts/audit-worker.ts <task>`, the checks re-run by the lead, the `reviewer` subagent (`docs/LEAD.md` steps 5–6).
+2. Merge into `main` one branch at a time, fast-forward or `--no-ff`; after each merge run `bun test && bun run typecheck && bun run web:build` on the merged result, and `docker compose build` when `package.json`, `bun.lock` or the Dockerfile changed (each branch passing alone does not prove the merge works).
 3. Clean up: delete the merged branch (`git branch -d <slice>-<task>`) and its worktree if it had one (`git worktree remove .worktrees/<task>`).
 4. Push `main` only after the user approves.
 
 ## When to parallelise
 - Good: independent collectors (one directory each), UI vs. collector work, docs vs. code. Exception to disjoint files: each collector adds one `COLLECTORS` entry in `src/cli/collect.ts`; the lead resolves those conflicts at merge (`docs/COLLECTORS.md`).
-- Bad: review fixes, schema changes, anything touching `src/db.ts`, `src/types.ts` or `src/pipeline.ts`; do these in one worker.
+- Bad: review fixes, schema changes, anything touching `src/db.ts`, `src/types.ts` or `src/pipeline.ts`; do these in one worker. When parallel tasks share a contract (schema, types, API shape), a short contract task runs and merges first; the parallel workers start from that `main`.

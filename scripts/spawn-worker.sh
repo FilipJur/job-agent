@@ -2,18 +2,35 @@
 # Open an omp worker session in a Ghostty pane. Usage: scripts/spawn-worker.sh <dir> <prompt-file> [model]
 # The first worker opens a new "workers" window; later ones split it (right, down, right). Max 4.
 # [model] overrides the project policy only when the user asks for a specific model (docs/LEAD.md).
+# Task id = prompt file name without .md. Deletes a stale report for that id and writes the run record
+# .lead/runs/<task>.env read by scripts/watch-workers.sh and scripts/audit-worker.ts.
 # Prints the pane's terminal id. Docs: docs/LEAD.md.
 set -eu
 [ $# -eq 2 ] || [ $# -eq 3 ] || { echo "usage: $0 <dir> <prompt-file> [model]" >&2; exit 2; }
+repo=$(cd "$(dirname "$0")/.." && pwd)
 dir=$(cd "$1" && pwd)
 prompt=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
 [ -f "$prompt" ] || { echo "no prompt file: $prompt" >&2; exit 2; }
+task=$(basename "$prompt" .md)
+report="$repo/.lead/reports/$task.md"
+run="$repo/.lead/runs/$task.env"
+
+# Prompt contract (docs/LEAD.md "Prompt template"): file set, branch and the exact report line.
+grep -q "Files you may change:" "$prompt" || { echo "prompt lacks 'Files you may change:'" >&2; exit 2; }
+grep -qF "$report" "$prompt" || { echo "prompt must name the report path $report" >&2; exit 2; }
+branch=$(sed -n 's/.*branch `\([^`]*\)`.*/\1/p' "$prompt" | head -n 1)
+[ -n "$branch" ] || { echo "prompt lacks the branch as: branch \`name\`" >&2; exit 2; }
+[ -e "$run" ] && { echo "task id $task was already spawned ($run); use a new prompt name" >&2; exit 2; }
+
+rm -f "$report"
+mkdir -p "$repo/.lead/runs" "$repo/.lead/reports"
 state="${TMPDIR:-/tmp}/job-agent-workers-window"
 model_flag=""
 [ $# -eq 3 ] && model_flag="--model=$3 "
 window=$(cat "$state" 2>/dev/null || true)
+spawned_at=$(date +%s)
 
-osascript - "$dir" "$prompt" "$window" "$state" "$model_flag" <<'EOF'
+term_id=$(osascript - "$dir" "$prompt" "$window" "$state" "$model_flag" <<'EOF'
 on run argv
   set {d, p, winId, stateFile, modelFlag} to argv
   tell application "Ghostty"
@@ -40,3 +57,17 @@ on run argv
   end tell
 end run
 EOF
+)
+
+cat > "$run" <<EOF
+TASK=$task
+TERM_ID=$term_id
+DIR=$dir
+PROMPT=$prompt
+REPORT=$report
+BRANCH=$branch
+MODEL=${3:-}
+SPAWNED_AT=$spawned_at
+BASE=$(git -C "$dir" rev-parse HEAD)
+EOF
+echo "$term_id"
