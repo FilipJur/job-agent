@@ -1,523 +1,68 @@
-:root {
-  color-scheme: light dark;
-  --bg: #f5f5f2;
-  --surface: #ffffff;
-  --surface-2: #eeece6;
-  --text: #1b1b19;
-  --muted: #64645d;
-  --line: #dcdcd3;
-  --accent: #2456b3;
-  --accent-text: #ffffff;
-  --good: #167a46;
-  --mid: #96620a;
-  --low: #a3342a;
-  --radius: 10px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161614;
-    --surface: #1f1f1c;
-    --surface-2: #2a2a26;
-    --text: #ecece7;
-    --muted: #a3a39a;
-    --line: #383832;
-    --accent: #8db2ff;
-    --accent-text: #10131a;
-    --good: #63d19a;
-    --mid: #e5b955;
-    --low: #ff9182;
-  }
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html {
-  -webkit-text-size-adjust: 100%;
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-
-a {
-  color: var(--accent);
-}
-
-button,
-select,
-input,
-textarea {
-  font: inherit;
-  color: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.app-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
-}
-
-.header-inner {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 10px 12px 0;
-}
-
-h1 {
-  margin: 0 0 8px;
-  font-size: 1.05rem;
-  letter-spacing: 0.01em;
-}
-
-.tabs {
-  display: flex;
-  gap: 2px;
-  max-width: 560px;
-}
-
-.tab {
-  flex: 1;
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
-  background: transparent;
-  color: var(--muted);
-}
-
-.tab-active {
-  background: var(--surface);
-  border-color: var(--line);
-  color: var(--text);
-  font-weight: 600;
-}
-
-.app-main {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 12px 12px 40px;
-}
-
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.filter,
-.filter-reset {
-  min-height: 40px;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-}
-
-.filter-active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-text);
-}
-
-.filter-reset {
-  border-style: dashed;
-  background: transparent;
-  color: var(--muted);
-}
-
-.status {
-  margin: 0 0 10px;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.error {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--low);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--low) 14%, var(--surface));
-}
-
-.error-close {
-  margin-left: auto;
-  padding: 0 4px;
-  border: none;
-  background: transparent;
-  font-size: 1.3rem;
-  line-height: 1;
-}
-
-.empty {
-  padding: 24px 0;
-  color: var(--muted);
-  text-align: center;
-}
-
-.offers {
-  display: grid;
-  gap: 10px;
-}
-
-.offer {
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-.offer-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.offer-title {
-  margin: 0;
-  font-size: 1rem;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.offer-title a {
-  color: var(--text);
-  text-decoration: none;
-}
-
-.offer-title a:hover {
-  color: var(--accent);
-  text-decoration: underline;
-}
-
-.score {
-  flex: none;
-  padding: 3px 8px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.score-good {
-  color: var(--good);
-}
-
-.score-mid {
-  color: var(--mid);
-}
-
-.score-low {
-  color: var(--low);
-}
-
-.score-none {
-  color: var(--muted);
-  font-weight: 400;
-}
-
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 0.875rem;
-}
-
-.meta > span:not(:last-child)::after {
-  content: "·";
-  margin: 0 6px;
-}
-
-.meta .company {
-  color: var(--text);
-  font-weight: 500;
-}
-
-.meta .salary {
-  color: var(--text);
-  font-weight: 500;
-}
-
-.meta-sub {
-  font-size: 0.8rem;
-}
-
-.partial {
-  color: var(--mid);
-}
-
-.score-detail {
-  margin-top: 8px;
-  font-size: 0.9rem;
-}
-
-.reason {
-  margin: 0;
-}
-
-.gaps {
-  margin: 2px 0 0;
-  color: var(--muted);
-}
-
-.gaps-label {
-  font-weight: 600;
-}
-
-.labels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.chip {
-  padding: 2px 8px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.feedback-reason {
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.action {
-  min-width: 44px;
-  min-height: 40px;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.action:hover:not(:disabled) {
-  border-color: var(--accent);
-}
-
-.action-active {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-text);
-  font-weight: 600;
-}
-
-.action:disabled {
-  cursor: progress;
-  opacity: 0.55;
-}
-
-.agencies {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  border-collapse: collapse;
-  background: var(--surface);
-  font-size: 0.9rem;
-}
-
-.agencies th,
-.agencies td {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
-  vertical-align: top;
-}
-
-.agencies th {
-  color: var(--muted);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.agencies tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.agency-name {
-  font-weight: 600;
-}
-
-.fit {
-  display: inline-block;
-  min-width: 24px;
-  padding: 1px 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface-2);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
-.contact {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 4px;
-}
-
-.contact a {
-  overflow-wrap: break-word;
-  font-size: 0.8rem;
-  font-weight: 400;
-}
-
-.status-select,
-.date-input,
-.notes {
-  width: 100%;
-  min-height: 38px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  font-size: 0.85rem;
-}
-
-.notes {
-  min-width: 150px;
-  resize: vertical;
-}
-
-.date-input {
-  min-width: 122px;
-  padding: 6px 4px;
-}
-
-.status-select {
-  min-width: 116px;
-  padding: 6px 4px;
-}
-
-.profile {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.profile-text {
-  width: 100%;
-  min-height: 300px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  font-size: 0.85rem;
-  resize: vertical;
-}
-
-.profile-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.hint {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-@media (min-width: 900px) {
-  .offers {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-@media (max-width: 760px) {
-  .agencies,
-  .agencies tbody,
-  .agencies tr,
-  .agencies td {
-    display: block;
-    width: 100%;
+@import "tailwindcss";
+
+/*
+ * Design tokens. Warm "ink and saffron" dark palette in OKLCH; every colour utility
+ * (bg-surface, text-muted, border-accent/40 …) is generated from these.
+ */
+@theme {
+  --color-bg: oklch(0.165 0.012 75);
+  --color-surface: oklch(0.205 0.013 75);
+  --color-raised: oklch(0.245 0.014 75);
+  --color-line: oklch(0.32 0.014 75);
+  --color-fg: oklch(0.93 0.015 85);
+  --color-muted: oklch(0.7 0.02 80);
+  --color-accent: oklch(0.8 0.15 80);
+  --color-good: oklch(0.78 0.13 150);
+  --color-mid: oklch(0.8 0.14 80);
+  --color-low: oklch(0.72 0.14 30);
+
+  --font-display: "Iowan Old Style", "Palatino Linotype", Charter, Georgia, serif;
+  --font-sans: "Avenir Next", Seravek, "Gill Sans", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
   }
 
-  .agencies {
-    border: none;
-    background: transparent;
+  body {
+    @apply bg-bg font-sans text-fg antialiased;
+    min-height: 100dvh;
+    background-image: radial-gradient(60rem 28rem at 50% -8rem, oklch(0.3 0.05 80 / 0.35), transparent 70%);
+    background-attachment: fixed;
   }
 
-  .agencies thead {
-    display: none;
+  /* Paper grain; fixed, non-interactive, very low contrast. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
-  .agencies tr {
-    margin-bottom: 10px;
-    padding: 10px 12px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--surface);
+  a {
+    @apply text-accent underline-offset-4;
   }
 
-  .agencies td {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 4px 0;
-    border: none;
+  button {
+    @apply cursor-pointer;
   }
 
-  .agencies td::before {
-    flex: 0 0 96px;
-    padding-top: 2px;
-    color: var(--muted);
-    font-size: 0.8rem;
-    content: attr(data-label);
+  button:disabled {
+    @apply cursor-not-allowed;
   }
 
-  .agencies td > select,
-  .agencies td > input,
-  .agencies td > textarea,
-  .agencies td > .contact {
-    flex: 1 1 auto;
-    min-width: 0;
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 
-  .agencies td.agency-name {
-    margin-bottom: 4px;
-    font-size: 1.05rem;
-  }
-
-  .agencies td.agency-name::before {
-    content: none;
+  ::selection {
+    background: oklch(0.8 0.15 80 / 0.35);
   }
 }
