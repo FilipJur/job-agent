@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ScoreBar } from "./OffersView";
 import { WORKPLACE_LABELS } from "./format";
 import { meta, note, tag } from "./ui";
-import type { AspirationRow } from "./api";
+import type { AspirationRow } from "./types";
 
 function AspirationItem({ row }: { row: AspirationRow }) {
   return (

@@ -1,7 +1,7 @@
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchAgencies, fetchAspirations, fetchOffers, patchAgency, saveFeedback } from "./api";
-import type { AspirationRow, OfferFilters } from "./api";
+import type { OfferFilters } from "./api";
 import { AgenciesView } from "./AgenciesView";
 import { AspirationsView } from "./AspirationsView";
 import { applyFilters, MIN_SCORES, NO_CLIENT_FILTERS } from "./filters";
@@ -11,7 +11,7 @@ import { linkButton } from "./ui";
 import { OfferFilterBar } from "./OfferFilterBar";
 import { OffersView } from "./OffersView";
 import { ProfileView } from "./ProfileView";
-import type { AgencyPatch, AgencyRow, OfferRow, Tab, Verdict } from "./types";
+import type { AgencyPatch, AgencyRow, AspirationRow, OfferRow, Tab, Verdict } from "./types";
 
 type View = Tab | "aspirace" | "agencies" | "profile";
 

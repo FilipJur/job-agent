@@ -1,6 +1,7 @@
 export type {
   AgencyPatch,
   AgencyRow,
+  AspirationRow,
   AgencyStatus,
   OfferFeedback,
   OfferRow,
