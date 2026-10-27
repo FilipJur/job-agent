@@ -3,7 +3,7 @@ import type { OfferFilters } from "./api";
 import { activeFilterCount, labelCounts, MIN_SCORES, sourceCounts } from "./filters";
 import type { ClientFilters, SortKey } from "./filters";
 import { offerRatio } from "./format";
-import { checkbox, control, fieldLabel, linkButton, radio, selectControl, selectWrap, tag } from "./ui";
+import { checkbox, control, fieldLabel, linkButton, selectControl, selectWrap, tag } from "./ui";
 import type { OfferRow } from "./types";
 
 const SERVER_TOGGLES: { key: keyof OfferFilters; label: string }[] = [
@@ -109,21 +109,6 @@ export function OfferFilterBar({
           </span>
         </div>
 
-        <span className={`${fieldLabel} hidden sm:block`}>skóre od</span>
-        <div className="flex flex-wrap items-center gap-x-4" role="group" aria-label="Minimální skóre">
-          {MIN_SCORES.map((min) => (
-            <button
-              key={min}
-              type="button"
-              className={`${radio} rb tabular-nums`}
-              aria-pressed={filters.minScore === min}
-              onClick={() => onChange({ ...filters, minScore: min })}
-            >
-              {min === 0 ? "vše" : `${min}+`}
-            </button>
-          ))}
-        </div>
-
         <span className={`${fieldLabel} hidden sm:block`}>zobrazit</span>
         <div className="flex flex-wrap items-center gap-x-4" role="group" aria-label="Rychlé filtry">
           {SERVER_TOGGLES.map(({ key, label }) => (
@@ -141,21 +126,38 @@ export function OfferFilterBar({
 
         {labels.length > 0 && (
           <>
-            <span className={`${fieldLabel} hidden self-start sm:block`}>štítky</span>
-            <ul className="flex flex-wrap gap-x-4" aria-label="Štítky (všechny vybrané musí platit)">
-              {labels.map(({ label, count, selected }) => (
-                <li key={label}>
+            <span className={`${fieldLabel} hidden self-start sm:block`}>štítky · skóre</span>
+            <div className="flex flex-wrap items-start gap-x-6 gap-y-2">
+              <ul className="flex flex-wrap gap-x-4" aria-label="Štítky (všechny vybrané musí platit)">
+                {labels.map(({ label, count, selected }) => (
+                  <li key={label}>
+                    <button
+                      type="button"
+                      className={`${checkbox} cb ${count === 0 && !selected ? "opacity-35" : ""}`}
+                      aria-pressed={selected}
+                      onClick={() => toggleLabel(label)}
+                    >
+                      {label} <span className="text-faint tabular-nums">{count}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <span className="inline-flex shrink-0 overflow-hidden border border-line" role="group" aria-label="Minimální skóre">
+                {MIN_SCORES.map((min, index) => (
                   <button
+                    key={min}
                     type="button"
-                    className={`${checkbox} cb ${count === 0 && !selected ? "opacity-35" : ""}`}
-                    aria-pressed={selected}
-                    onClick={() => toggleLabel(label)}
+                    className={`px-2 py-0.5 text-sm tabular-nums transition-colors ${
+                      index > 0 ? "border-l border-line" : ""
+                    } ${filters.minScore === min ? "bg-signal font-semibold text-bg" : "text-muted hover:text-fg"}`}
+                    aria-pressed={filters.minScore === min}
+                    onClick={() => onChange({ ...filters, minScore: min })}
                   >
-                    {label} <span className="text-faint tabular-nums">{count}</span>
+                    {min === 0 ? "vše" : `${min}+`}
                   </button>
-                </li>
-              ))}
-            </ul>
+                ))}
+              </span>
+            </div>
           </>
         )}
       </div>

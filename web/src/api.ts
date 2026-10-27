@@ -1,10 +1,32 @@
 import type { AgencyPatch, AgencyRow, OfferRow, Tab, Verdict } from "./types";
 
+/** Contract for GET /api/aspirations (backend worker owns src/types.ts); matches the prompt shape. */
+export interface AspirationRow {
+  id: number;
+  title: string;
+  company: string | null;
+  url: string;
+  city: string | null;
+  workplace: OfferRow["workplace"];
+  locationText: string | null;
+  score: number;
+  reason: string;
+  direction: string;
+  gaps: string;
+  labels: string[];
+  model: string;
+  scoredAt: string;
+}
+
 export interface OfferFilters {
   onlyNew: boolean;
   remote: boolean;
   olomouc: boolean;
   hidden: boolean;
+}
+
+export async function fetchAspirations(signal: AbortSignal): Promise<AspirationRow[]> {
+  return request<AspirationRow[]>("/api/aspirations", { signal });
 }
 
 /** Extracts the `{ error }` message the API returns for 4xx/5xx responses. */
