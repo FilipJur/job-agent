@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type {
   AgencyCrawl,
+  AgencyForm,
   AgencyPatch,
   AgencyRow,
   AgencySeed,
@@ -287,7 +288,7 @@ export function saveFeedback(db: Database, offerId: number, verdict: FeedbackVer
 }
 
 interface AgencyDbRow {
-  contact_url: string | null;
+  position_url: string | null;
   id: number;
   name: string;
   web: string | null;
@@ -303,18 +304,21 @@ interface AgencyDbRow {
   last_contact_at: string | null;
   created_at: string;
   updated_at: string;
-  careers_url: string | null;
-  hiring_ico: number;
-  hiring_evidence: string | null;
-  hourly_rate: string | null;
-  rate_min_czk: number | null;
-  rate_max_czk: number | null;
+  contact_url: string | null;
+  dev_position_open: number;
+  position_title: string | null;
+  evidence_quote: string | null;
+  form: string | null;
+  dev_rate: string | null;
+  remote_or_olomouc: number;
+  ai_fit: number | null;
+  ai_reason: string | null;
   crawled_at: string | null;
 }
 
 const AGENCY_COLS =
   "id, name, web, city, focus, stack, signal, email, phone, contact_url, fit, status, notes, last_contact_at, created_at, updated_at, " +
-  "careers_url, hiring_ico, hiring_evidence, hourly_rate, rate_min_czk, rate_max_czk, crawled_at";
+  "dev_position_open, position_title, position_url, evidence_quote, form, dev_rate, remote_or_olomouc, ai_fit, ai_reason, crawled_at";
 
 function toAgencyRow(r: AgencyDbRow): AgencyRow {
   return {
@@ -334,39 +338,51 @@ function toAgencyRow(r: AgencyDbRow): AgencyRow {
     lastContactAt: r.last_contact_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
-    careersUrl: r.careers_url,
-    hiringIco: r.hiring_ico === 1,
-    hiringEvidence: r.hiring_evidence,
-    hourlyRate: r.hourly_rate,
-    rateMinCzk: r.rate_min_czk,
-    rateMaxCzk: r.rate_max_czk,
+    devPositionOpen: r.dev_position_open === 1,
+    positionTitle: r.position_title,
+    positionUrl: r.position_url,
+    evidenceQuote: r.evidence_quote,
+    form: (r.form as AgencyRow["form"]) ?? null,
+    devRate: r.dev_rate,
+    remoteOrOlomouc: r.remote_or_olomouc === 1,
+    aiFit: r.ai_fit,
+    aiReason: r.ai_reason,
     crawledAt: r.crawled_at,
   };
 }
 
-/** Proven IČO/freelance hiring first, then a published hourly rate, then fit, then name. */
+/** Open web-dev position first, then IČO-able form, stated dev rate, remote/Olomouc, AI fit, seed fit, name. */
 export function listAgencies(db: Database): AgencyRow[] {
   return db
     .query<AgencyDbRow, []>(
       `SELECT ${AGENCY_COLS} FROM agencies
-       ORDER BY hiring_ico DESC, (rate_min_czk IS NULL AND rate_max_czk IS NULL) ASC, fit DESC, name ASC`,
+       ORDER BY dev_position_open DESC,
+         (form IN ('ico', 'both')) DESC,
+         (dev_rate IS NOT NULL) DESC,
+         remote_or_olomouc DESC,
+         ai_fit IS NULL ASC, ai_fit DESC,
+         fit DESC, name ASC`,
     )
     .all()
     .map(toAgencyRow);
 }
 
-/** Stores the result of one agency website crawl (replaces the previous crawl fields). */
+/** Stores the result of one agency website crawl (replaces the previous judgment fields). */
 export function saveAgencyCrawl(db: Database, id: number, crawl: AgencyCrawl): void {
+  const form: AgencyForm | null = crawl.form;
   db.run(
-    `UPDATE agencies SET careers_url = ?, hiring_ico = ?, hiring_evidence = ?, hourly_rate = ?,
-       rate_min_czk = ?, rate_max_czk = ?, crawled_at = ? WHERE id = ?`,
+    `UPDATE agencies SET dev_position_open = ?, position_title = ?, position_url = ?, evidence_quote = ?,
+       form = ?, dev_rate = ?, remote_or_olomouc = ?, ai_fit = ?, ai_reason = ?, crawled_at = ? WHERE id = ?`,
     [
-      crawl.careersUrl,
-      crawl.hiringIco ? 1 : 0,
-      crawl.hiringEvidence,
-      crawl.hourlyRate,
-      crawl.rateMinCzk,
-      crawl.rateMaxCzk,
+      crawl.devPositionOpen ? 1 : 0,
+      crawl.positionTitle,
+      crawl.positionUrl,
+      crawl.evidenceQuote,
+      form,
+      crawl.devRate,
+      crawl.remoteOrOlomouc ? 1 : 0,
+      crawl.aiFit,
+      crawl.aiReason,
       crawl.crawledAt,
       id,
     ],
@@ -396,8 +412,8 @@ export function updateAgency(db: Database, id: number, patch: AgencyPatch): Agen
 }
 
 /**
- * Inserts agencies by name. Existing names only get their contact fields
- * (web, email, phone, contact_url) refreshed; status, notes and last contact stay.
+ * Inserts agencies by name. Existing names get their research fields
+ * (web, focus, stack, signal, fit, contacts) refreshed; status, notes and last contact stay.
  */
 export function seedAgencies(db: Database, items: AgencySeed[]): { inserted: number; updated: number; skipped: number } {
   const now = new Date().toISOString();
@@ -407,8 +423,8 @@ export function seedAgencies(db: Database, items: AgencySeed[]): { inserted: num
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)`,
   );
   const refresh = db.prepare(
-    `UPDATE agencies SET web = ?, email = ?, phone = ?, contact_url = ?, updated_at = ?
-     WHERE name = ? AND (web IS NOT ? OR email IS NOT ? OR phone IS NOT ? OR contact_url IS NOT ?)`,
+    `UPDATE agencies SET web = ?, focus = ?, stack = ?, signal = ?, email = ?, phone = ?, contact_url = ?, fit = ?, updated_at = ?
+     WHERE name = ? AND (web IS NOT ? OR focus IS NOT ? OR stack IS NOT ? OR signal IS NOT ? OR email IS NOT ? OR phone IS NOT ? OR contact_url IS NOT ? OR fit IS NOT ?)`,
   );
   const changed = db.query<{ n: number }, []>("SELECT changes() AS n");
   let inserted = 0;
@@ -416,13 +432,22 @@ export function seedAgencies(db: Database, items: AgencySeed[]): { inserted: num
   let skipped = 0;
   db.transaction(() => {
     for (const a of items) {
-      const [web, email, phone, contactUrl] = [a.web ?? null, a.email ?? null, a.phone ?? null, a.contact_url ?? null];
-      insert.run(a.name, web, a.city ?? null, a.focus ?? null, a.stack ?? null, a.signal ?? null, email, phone, contactUrl, a.fit, now, now);
+      const [web, focus, stack, signal, email, phone, contactUrl, fit] = [
+        a.web ?? null,
+        a.focus ?? null,
+        a.stack ?? null,
+        a.signal ?? null,
+        a.email ?? null,
+        a.phone ?? null,
+        a.contact_url ?? null,
+        a.fit,
+      ];
+      insert.run(a.name, web, a.city ?? null, focus, stack, signal, email, phone, contactUrl, fit, now, now);
       if ((changed.get()?.n ?? 0) === 1) {
         inserted += 1;
         continue;
       }
-      refresh.run(web, email, phone, contactUrl, now, a.name, web, email, phone, contactUrl);
+      refresh.run(web, focus, stack, signal, email, phone, contactUrl, fit, now, a.name, web, focus, stack, signal, email, phone, contactUrl, fit);
       if ((changed.get()?.n ?? 0) === 1) updated += 1;
       else skipped += 1;
     }

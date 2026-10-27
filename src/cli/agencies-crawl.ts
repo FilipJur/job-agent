@@ -5,11 +5,12 @@ import { createHttpClient } from "../collectors/jobscz/http";
 import { openDb } from "../db";
 import { createCachedFetch, type HttpMode } from "../http-cache";
 import { listAgencies, saveAgencyCrawl } from "../repo";
-import type { AgencyCrawl } from "../types";
+import { loadScoringConfig } from "../scoring/config";
+import type { JudgeOptions } from "../agencies/judge";
 
-function renderRate(crawl: AgencyCrawl): string {
-  if (crawl.hourlyRate === null) return "no rate";
-  return `${crawl.hourlyRate} [${crawl.rateMinCzk}–${crawl.rateMaxCzk}]`;
+function renderRow(a: { devPositionOpen: boolean; positionTitle: string | null; form: string | null; devRate: string | null; aiFit: number | null }): string {
+  if (!a.devPositionOpen) return `no open position (aiFit ${a.aiFit ?? "?"})`;
+  return `OPEN: ${a.positionTitle ?? "?"} [${a.form ?? "?"}] rate=${a.devRate ?? "unstated"} aiFit=${a.aiFit ?? "?"}`;
 }
 
 export async function main(argv: string[]): Promise<void> {
@@ -34,7 +35,21 @@ export async function main(argv: string[]): Promise<void> {
     mode,
     dir: process.env.HTTP_CACHE_DIR || "data/http-cache",
   });
+  const apiKey = process.env.OPENCODE_GO_API_KEY ?? "";
+  // Judge options without a key: crawl still fetches pages (cached/recorded), judgment is skipped per agency.
+  const { config: scoringConfig } = loadScoringConfig();
+  const judgeOpts: JudgeOptions | undefined =
+    apiKey === ""
+      ? undefined
+      : {
+          endpoint: scoringConfig.endpoint,
+          model: scoringConfig.model,
+          apiKey,
+          sessionId: process.env.OPENCODE_GO_SESSION ?? crypto.randomUUID(),
+        };
   const db = openDb(process.env.DB_PATH || "data/jobs.db");
+  let promptTokens = 0;
+  let completionTokens = 0;
   try {
     const agencies = listAgencies(db).filter((a) => a.web !== null);
     const due = force ? agencies : agencies.filter((a) => isCrawlDue(a.crawledAt, nowMs));
@@ -43,12 +58,16 @@ export async function main(argv: string[]): Promise<void> {
       console.log(`${a.name}: skipped (crawled ${a.crawledAt})`);
     }
     for (const a of due) {
-      const outcome = await crawlAgency(fetchText, a, nowIso);
+      const outcome = await crawlAgency(fetchText, a, nowIso, judgeOpts);
       saveAgencyCrawl(db, a.id, outcome.crawl);
-      const hiring = outcome.crawl.hiringIco ? `hiring YES: ${outcome.crawl.hiringEvidence}` : "hiring no";
+      promptTokens += outcome.promptTokens;
+      completionTokens += outcome.completionTokens;
       const errors = outcome.error ? ` errors=1 (${outcome.error})` : "";
-      console.log(`${a.name}: ${hiring} | rate: ${renderRate(outcome.crawl)} | pages=${outcome.pagesFetched}${errors}`);
+      console.log(`${a.name}: ${renderRow(outcome.crawl)} | pages=${outcome.pagesFetched}${errors}`);
     }
+    const cost =
+      (promptTokens / 1_000_000) * scoringConfig.prices.inputPer1M + (completionTokens / 1_000_000) * scoringConfig.prices.outputPer1M;
+    console.log(`tokens=${promptTokens}+${completionTokens} cost=$${cost.toFixed(4)}`);
   } finally {
     db.close();
   }

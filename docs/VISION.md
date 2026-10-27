@@ -59,7 +59,7 @@ Dropped: Upwork (robots.txt disallows `/nx/` search and `/jobs/rss`), prace.cz (
 
 How to add a source: `docs/COLLECTORS.md`.
 
-Agencies: discovered once via firmy.cz "Webdesign" (okres Olomouc) + web search; 21 seeded.
+Agencies: discovered once via firmy.cz "Webdesign" (okres Olomouc) + web search; 21 seeded. Agentury tab shows open web-dev positions first (LLM judgment over careers/job pages, verified verbatim quotes, developer pay only — never client prices), then the rest.
 
 ## Deployment
 Old MacBook (M1, 8 GB) at home, OrbStack + docker compose: one container for the daily collect/score job, one for the web. Access via LAN or Tailscale; no public exposure, no auth. Secrets only in `.env`.

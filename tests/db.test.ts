@@ -111,15 +111,17 @@ describe("openDb on a file", () => {
     migrated.close();
   });
 
-  test("an agencies table without contact_url gains the column and keeps its rows", () => {
+  test("an agencies table with legacy crawl columns is migrated to the judgment columns", () => {
     const oldPath = join(dir, "agencies-old.db");
     const old = new Database(oldPath, { create: true });
-    old.run("CREATE TABLE agencies (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, fit INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'new', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)");
-    old.run("INSERT INTO agencies (name, fit, created_at, updated_at) VALUES ('A', 3, 't', 't')");
+    old.run("CREATE TABLE agencies (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, fit INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'new', careers_url TEXT, hiring_ico INTEGER NOT NULL DEFAULT 0, hiring_evidence TEXT, hourly_rate TEXT, rate_min_czk INTEGER, rate_max_czk INTEGER, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)");
+    old.run("INSERT INTO agencies (name, fit, careers_url, hiring_ico, hiring_evidence, hourly_rate, rate_min_czk, created_at, updated_at) VALUES ('A', 3, 'https://a.test/cenik', 1, 'quote', '650 Kč/h', 650, 't', 't')");
     old.close();
 
     const migrated = openDb(oldPath);
-    expect(migrated.query("SELECT name, contact_url FROM agencies").all()).toEqual([{ name: "A", contact_url: null }]);
+    expect(migrated.query("SELECT name, dev_position_open, dev_rate FROM agencies").all()).toEqual([
+      { name: "A", dev_position_open: 0, dev_rate: null },
+    ]);
     migrated.close();
   });
 

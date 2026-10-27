@@ -105,6 +105,13 @@ function addColumnIfMissing(db: Database, table: string, column: string, definit
     if (backfill) db.run(backfill);
   })();
 }
+/** Drops columns a clean cutover removed; no-op when all are already gone. */
+function dropColumnsIfPresent(db: Database, table: string, columns: string[]): void {
+  const present = new Set((db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name));
+  const missing = columns.filter((c) => present.has(c));
+  if (missing.length === 0) return;
+  db.run(`ALTER TABLE ${table} DROP COLUMN ${missing.join(", DROP COLUMN ")}`);
+}
 
 export function openDb(path: string): Database {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
@@ -120,13 +127,16 @@ export function openDb(path: string): Database {
   addColumnIfMissing(db, "runs", "partial", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "runs", "detail_errors", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "agencies", "contact_url", "TEXT");
-  // Filled by the agency website crawl (src/agencies/crawl.ts).
-  addColumnIfMissing(db, "agencies", "careers_url", "TEXT");
-  addColumnIfMissing(db, "agencies", "hiring_ico", "INTEGER NOT NULL DEFAULT 0");
-  addColumnIfMissing(db, "agencies", "hiring_evidence", "TEXT");
-  addColumnIfMissing(db, "agencies", "hourly_rate", "TEXT");
-  addColumnIfMissing(db, "agencies", "rate_min_czk", "INTEGER");
-  addColumnIfMissing(db, "agencies", "rate_max_czk", "INTEGER");
+  // Filled by the agency website crawl: LLM judgment over candidate careers/job pages (src/agencies/crawl.ts).
+  addColumnIfMissing(db, "agencies", "dev_position_open", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(db, "agencies", "position_title", "TEXT");
+  addColumnIfMissing(db, "agencies", "position_url", "TEXT");
+  addColumnIfMissing(db, "agencies", "evidence_quote", "TEXT");
+  addColumnIfMissing(db, "agencies", "form", "TEXT");
+  addColumnIfMissing(db, "agencies", "dev_rate", "TEXT");
+  addColumnIfMissing(db, "agencies", "remote_or_olomouc", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(db, "agencies", "ai_fit", "INTEGER");
+  addColumnIfMissing(db, "agencies", "ai_reason", "TEXT");
   addColumnIfMissing(db, "agencies", "crawled_at", "TEXT");
   addColumnIfMissing(db, "offer_scores", "verdict", "TEXT NOT NULL DEFAULT 'fit' CHECK (verdict IN ('fit', 'blocked', 'aspiration'))");
   addColumnIfMissing(db, "offer_scores", "blocker", "TEXT");
