@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useIsPresent } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clearVerdict, fetchTriageCached, sendVerdict } from "./api";
 import { DraftPanel } from "./DraftPanel";
@@ -351,6 +351,7 @@ export function TriageView({
 
   const toggleDraft = useCallback(() => setDraftOpen((open) => !open), []);
 
+  const present = useIsPresent();
   useKeys((event) => {
     const key = event.key;
     const chip = CHIPS.find((c) => c.key === key);
@@ -371,7 +372,7 @@ export function TriageView({
       const offer = stateRef.current.queue[0];
       if (offer) window.open(offer.url, "_blank", "noopener,noreferrer");
     } else if (key === "z") void undo();
-  });
+  }, present);
 
   return (
     <div>

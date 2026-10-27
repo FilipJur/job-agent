@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useIsPresent } from "motion/react";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchApplicationsCached, removeApplication, saveApplication } from "./api";
@@ -412,6 +412,7 @@ export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset
     [onFeedback],
   );
 
+  const present = useIsPresent();
   useKeys((event) => {
     if (event.key === "/") {
       event.preventDefault();
@@ -443,11 +444,11 @@ export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset
       else if (event.key === "d" && copilotReady) toggleDraft(selectedOffer.id);
       else if (event.key === "o" || event.key === "Enter") window.open(selectedOffer.url, "_blank", "noopener,noreferrer");
     }
-  });
+  }, present);
 
   return (
     <>
-      <div className="relative border-t border-line @container">
+      <div className="relative overflow-x-clip border-t border-line @container">
         <AnimatePresence mode="popLayout" initial custom={lastVerdict}>
           {offers.map((offer) => (
             <OfferItem

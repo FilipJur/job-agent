@@ -45,10 +45,11 @@ function subscribe(): () => void {
 }
 
 /** Subscribe a view's shortcut handler for as long as it is mounted; the latest closure is always used. */
-export function useKeys(handler: KeyHandler): void {
+export function useKeys(handler: KeyHandler, enabled = true): void {
   const latest = useRef(handler);
   latest.current = handler;
   useEffect(() => {
+    if (!enabled) return;
     const call: KeyHandler = (event) => latest.current(event);
     const unsubscribe = subscribe();
     handlers.add(call);
@@ -56,7 +57,7 @@ export function useKeys(handler: KeyHandler): void {
       handlers.delete(call);
       unsubscribe();
     };
-  }, []);
+  }, [enabled]);
 }
 
 /** `g <key>` sequences: `onKey` returns true when it consumed the key. Mount once, in the app shell. */
