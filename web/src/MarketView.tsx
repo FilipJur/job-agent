@@ -43,20 +43,25 @@ function RatesSection({ rates, currentRate }: { rates: RateBand[]; currentRate: 
     );
     return Math.max(100, Math.ceil(top / 100) * 100);
   }, [bands, currentRate]);
+  const known = currentRate > 0;
   const marker = `${((currentRate / max) * 100).toFixed(2)}%`;
 
   return (
     <fieldset className="border border-line px-3 pt-1 pb-3 sm:px-4">
       <legend className={`${fieldLabel} px-1.5`}>sazby (Kč/h)</legend>
       <p className="mb-1 text-[1.125rem] leading-snug font-semibold text-pretty">{headlineFor(rates, currentRate)}</p>
-      <p className="mb-3 text-sm text-muted">
-        <span className="mr-[1ch] text-signal">┆</span>teď {kcz.format(currentRate)} Kč/h
-      </p>
+      {known && (
+        <p className="mb-3 text-sm text-muted">
+          <span className="mr-[1ch] text-signal">┆</span>teď {kcz.format(currentRate)} Kč/h
+        </p>
+      )}
       <div className="relative mb-1 h-4 text-xs text-faint tabular-nums" aria-hidden="true">
         <span className="absolute left-0">0</span>
-        <span className="absolute -translate-x-1/2" style={{ left: marker }}>
-          {kcz.format(currentRate)}
-        </span>
+        {known && (
+          <span className="absolute -translate-x-1/2" style={{ left: marker }}>
+            {kcz.format(currentRate)}
+          </span>
+        )}
         <span className="absolute right-0">{kcz.format(max)}</span>
       </div>
       <ul className="grid gap-3">
@@ -83,16 +88,18 @@ function RatesSection({ rates, currentRate }: { rates: RateBand[]; currentRate: 
                 role="img"
                 aria-label={`${FORM_LABELS[band.form]} ${PLACE_LABELS[band.place]}: medián ${band.median ?? "—"}`}
               >
-                <line
-                  x1={(currentRate / max) * 1000}
-                  x2={(currentRate / max) * 1000}
-                  y1={0}
-                  y2={26}
-                  stroke="var(--color-signal)"
-                  strokeWidth={2}
-                  strokeDasharray="6 4"
-                  vectorEffect="non-scaling-stroke"
-                />
+                {known && (
+                  <line
+                    x1={(currentRate / max) * 1000}
+                    x2={(currentRate / max) * 1000}
+                    y1={0}
+                    y2={26}
+                    stroke="var(--color-signal)"
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                )}
                 {band.p25 !== null && band.p75 !== null && (
                   <rect
                     x={(band.p25 / max) * 1000}
