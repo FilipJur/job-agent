@@ -42,7 +42,7 @@ collectors (deterministic) → normalize → dedup → rule labels → LLM score
 - **Feedback**: 👍/👎 + reason per offer; weekly proposal to update `profile.md`, applied only after his approval.
 
 ## UI
-React + Vite, served by Bun. Three tabs: HPP, Kontrakty, Agentury. Offers sorted by score, filters (new, remote, Olomouc), reason + gaps, link, actions (👍, 👎, responded, hide). Agencies as a status table. Mobile-friendly. Animations (Framer Motion) only after v0.
+React + Vite, served by Bun. Tabs: HPP, Kontrakty, Agentury, Profil, and Aspirace (last, visually separated). Offers sorted by score, filters (new, remote, Olomouc, skryté), reason + gaps, link, verdict buttons (hodí se, nehodí se, odpověděl, aspirace, skrýt). One effective state per offer: the user's latest verdict wins over the model's (`fit` / `blocked` / `aspiration`); clicking the active verdict clears it (`DELETE /api/offers/:id/feedback`, stored as `cleared`) and the model's placement returns. Skryté lists everything removed from the tabs (by the user or by the model, with the blocker as the reason). Agencies as a status table. Mobile-friendly. Animations (Framer Motion) only after v0.
 
 ## Sources
 Measured on 2026-10-26 (relevant hits per query):

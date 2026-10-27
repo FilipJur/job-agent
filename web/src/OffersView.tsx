@@ -12,19 +12,57 @@ interface FeedbackAction {
   key: string;
 }
 
-const ACTIONS: FeedbackAction[] = [
+export const ACTIONS: FeedbackAction[] = [
   { verdict: "up", label: "hodí se", title: "Dobrá nabídka", key: "u" },
   { verdict: "down", label: "nehodí se", title: "Špatná nabídka", key: "d" },
   { verdict: "responded", label: "odpověděl", title: "Odpověděli", key: "r" },
+  { verdict: "aspiration", label: "aspirace", title: "Přesunout do aspirací", key: "a" },
   { verdict: "hidden", label: "skrýt", title: "Skrýt nabídku", key: "h" },
 ];
 
-const VERDICT_TAGS: Partial<Record<Verdict, { text: string; className: string }>> = {
+export const VERDICT_TAGS: Partial<Record<Verdict, { text: string; className: string }>> = {
   up: { text: "hodí se", className: "text-ok" },
   down: { text: "nehodí se", className: "text-bad" },
   responded: { text: "odpověděl", className: "text-signal" },
+  aspiration: { text: "aspirace", className: "text-signal" },
   hidden: { text: "skryto", className: "text-faint" },
 };
+
+interface FeedbackButtonsProps {
+  active?: Verdict;
+  pending: boolean;
+  itemLabel: string;
+  onFeedback: (verdict: Verdict) => void;
+}
+
+/** Five verdict buttons; clicking the active one clears it again. */
+export function FeedbackButtons({ active, pending, itemLabel, onFeedback }: FeedbackButtonsProps) {
+  return (
+    <div
+      className="flex flex-wrap gap-x-[2ch] pt-1 transition-opacity @xl:absolute @xl:right-1 @xl:bottom-2 @xl:bg-raised @xl:pl-2 @xl:pt-0 @xl:[@media(hover:hover)_and_(pointer:fine)]:opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 group-data-[selected=true]/row:opacity-100"
+      role="group"
+      aria-label={`Reakce na nabídku: ${itemLabel}`}
+    >
+      {ACTIONS.map((action) => {
+        const isActive = active === action.verdict;
+        return (
+          <button
+            key={action.verdict}
+            type="button"
+            className="text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal disabled:opacity-50 aria-pressed:bg-signal aria-pressed:text-bg"
+            aria-pressed={isActive}
+            aria-label={action.title}
+            title={`${action.title} (${action.key})`}
+            disabled={pending}
+            onClick={() => onFeedback(action.verdict)}
+          >
+            <span className={isActive ? "" : "text-faint"}>[{action.key}]</span> {action.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const rowVariants = {
   hidden: { opacity: 0 },
@@ -109,6 +147,18 @@ function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowP
         </p>
 
         {score !== null && score.reason.length > 0 && <p className={`${note} max-w-[84ch] text-fg/90 text-pretty`}>{score.reason}</p>}
+        {score !== null && score.verdict === "blocked" && offer.feedback === null && (
+          <p className="max-w-[84ch] text-sm text-muted text-pretty">
+            <span className={`${tag} mr-[1ch] text-bad`}>skryto AI</span>
+            {score.blocker.length > 0 ? score.blocker : "model označil nabídku jako nepoužitelnou"}
+          </p>
+        )}
+        {offer.feedback?.verdict === "hidden" && (
+          <p className="max-w-[84ch] text-sm text-muted text-pretty">
+            <span className={`${tag} mr-[1ch] text-faint`}>skryto tebou</span>
+            klikni na jiný verdikt nebo na [h] pro návrat
+          </p>
+        )}
         {score !== null && score.gaps.length > 0 && (
           <p className="max-w-[84ch] text-sm text-muted text-pretty">
             <span className={`${tag} mr-[1ch] text-faint`}>chybí</span>
@@ -128,29 +178,7 @@ function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowP
           <p className="text-sm text-muted"><span className={`${tag} mr-[1ch] text-faint`}>poznámka</span><span className={note}>{offer.feedback.reason}</span></p>
         )}
 
-        <div
-          className="flex flex-wrap gap-x-[2ch] pt-1 transition-opacity @xl:absolute @xl:right-1 @xl:bottom-2 @xl:bg-raised @xl:pl-2 @xl:pt-0 @xl:[@media(hover:hover)_and_(pointer:fine)]:opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 group-data-[selected=true]/row:opacity-100"
-          role="group"
-          aria-label="Reakce na nabídku"
-        >
-          {ACTIONS.map((action) => {
-            const active = offer.feedback?.verdict === action.verdict;
-            return (
-              <button
-                key={action.verdict}
-                type="button"
-                className="text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal disabled:opacity-50 aria-pressed:bg-signal aria-pressed:text-bg"
-                aria-pressed={active}
-                aria-label={action.title}
-                title={`${action.title} (${action.key})`}
-                disabled={pending}
-                onClick={() => onFeedback(offer, action.verdict)}
-              >
-                <span className={active ? "" : "text-faint"}>[{action.key}]</span> {action.label}
-              </button>
-            );
-          })}
-        </div>
+        <FeedbackButtons active={offer.feedback?.verdict} pending={pending} itemLabel={offer.title} onFeedback={(verdict) => onFeedback(offer, verdict)} />
       </div>
     </motion.article>
   );
