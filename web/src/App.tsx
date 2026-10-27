@@ -10,17 +10,19 @@ import { agencyCount, offerRatio } from "./format";
 import { linkButton } from "./ui";
 import { OfferFilterBar } from "./OfferFilterBar";
 import { OffersView } from "./OffersView";
+import { MarketView } from "./MarketView";
 import { ProfileView } from "./ProfileView";
 import { TriageView } from "./TriageView";
 import type { AgencyPatch, AgencyRow, AspirationRow, OfferRow, Tab, Verdict } from "./types";
 
-type View = Tab | "triage" | "aspirace" | "agencies" | "profile";
+type View = Tab | "triage" | "aspirace" | "agencies" | "profile" | "market";
 
 const TABS: { key: View; label: string; aside?: boolean }[] = [
   { key: "hpp", label: "HPP" },
   { key: "kontrakty", label: "Kontrakty" },
   { key: "triage", label: "Triáž" },
   { key: "agencies", label: "Agentury" },
+  { key: "market", label: "Trh" },
   { key: "profile", label: "Profil" },
   { key: "aspirace", label: "Aspirace", aside: true },
 ];
@@ -102,7 +104,7 @@ export function App() {
   }, [clientFilters]);
 
   useEffect(() => {
-    if (view === "profile" || view === "triage") {
+    if (view === "profile" || view === "triage" || view === "market") {
       setLoading(false);
       return;
     }
@@ -180,7 +182,7 @@ export function App() {
     }
   };
 
-  const isOffers = view !== "agencies" && view !== "profile" && view !== "aspirace" && view !== "triage";
+  const isOffers = view !== "agencies" && view !== "profile" && view !== "aspirace" && view !== "triage" && view !== "market";
 
   return (
     <MotionConfig reducedMotion="user">
@@ -290,6 +292,7 @@ export function App() {
               </>
             )}
             {view === "triage" && <TriageView onError={showError} />}
+            {view === "market" && <MarketView onError={showError} />}
             {view === "profile" && <ProfileView onError={showError} />}
           </motion.div>
         </AnimatePresence>
@@ -306,7 +309,9 @@ export function App() {
                 ? "klik na aktivní verdikt ho zruší · jiný verdikt vrátí nabídku do práce"
                 : view === "agencies"
                   ? "stav a poznámky se ukládají hned"
-                  : "uložit tlačítkem, přehodnocení při dalším scoringu"}
+                  : view === "market"
+                    ? "sazby z inzerátů · klik na vzorky je rozbalí"
+                    : "uložit tlačítkem, přehodnocení při dalším scoringu"}
           </span>
         </div>
       </footer>
