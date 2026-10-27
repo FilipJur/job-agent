@@ -103,7 +103,7 @@ async function main(argv: string[]): Promise<void> {
     );
     // Second opinion after the primary scoring; missing config = off. Failures print, never fail the run.
     try {
-      const opinionModel = secondModel() ?? scoringConfig.secondModel;
+      const opinionModel = secondModel();
       if (opinionModel !== undefined) {
         const second = await runSecondOpinion(db, {
           profile,

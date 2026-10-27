@@ -28,7 +28,7 @@ async function main(argv: string[]): Promise<void> {
   }
 
   const secondOnly = second;
-  const opinionModel = secondOnly ? (secondModel() ?? scoringConfig.secondModel) : undefined;
+  const opinionModel = secondOnly ? secondModel() : undefined;
   if (secondOnly && opinionModel === undefined) {
     console.error("config/scoring.json has no secondModel; second opinion is off");
     process.exitCode = 1;
@@ -49,7 +49,7 @@ async function main(argv: string[]): Promise<void> {
         (summary.promptTokens / 1_000_000) * scoringConfig.prices.inputPer1M +
         (summary.completionTokens / 1_000_000) * scoringConfig.prices.outputPer1M;
       console.log(
-        `${kind} scored=${summary.scored} failed=${summary.failed} skipped=${summary.skipped} ` +
+        `${kind === "" ? "" : kind + " "}scored=${summary.scored} failed=${summary.failed} skipped=${summary.skipped} ` +
           `wall=${(summary.wallMs / 1000).toFixed(1)}s tokens=${summary.promptTokens}+${summary.completionTokens} ` +
           `cost=$${cost.toFixed(4)}${summary.fallbackUsed ? " (json_object fallback used)" : ""}`,
       );
@@ -77,7 +77,7 @@ async function main(argv: string[]): Promise<void> {
       sessionId: process.env.OPENCODE_GO_SESSION ?? crypto.randomUUID(),
       ...(limit === undefined ? {} : { limit }),
     });
-    print("scored", summary);
+    print("", summary);
     process.exitCode = exitCode;
   } finally {
     db.close();

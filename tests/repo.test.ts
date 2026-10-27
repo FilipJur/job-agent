@@ -315,6 +315,17 @@ describe("triageQueue", () => {
     expect(queue).toMatchObject({ labeled: 0, remaining: 2 });
   });
 
+  test("respects the limit but keeps the full remaining count; excerpt is collapsed to 700 chars", () => {
+    db.run("UPDATE offers SET description = ? WHERE id = ?", ["a\n\n  b\t\tc ".repeat(100), offer()]);
+    offer();
+    const queue = triageQueue(db, { limit: 1 });
+    expect(queue.offers).toHaveLength(1);
+    expect(queue.remaining).toBe(2);
+    expect(queue.offers[0]!.excerpt.length).toBeLessThanOrEqual(700);
+    expect(queue.offers[0]!.excerpt).not.toContain("\n");
+    expect(queue.offers[0]!.excerpt).not.toContain("  ");
+  });
+
   test("opinions never change the latest score row; listOffers exposes both", () => {
     const id = offer({ labels: ["hpp"] });
     scored(id, 8, "2026-10-26T11:00:00.000Z");

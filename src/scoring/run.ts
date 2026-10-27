@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
-import { countOpinionsToScore, opinionsToScore, offersToScore, saveOpinion, saveScore } from "../repo";
+import { opinionsToScore, offersToScore, saveOpinion, saveScore } from "../repo";
 import type { OfferToScore } from "../types";
 import { defaultPostJson, scoreOneOffer, type PostJson, type ScoreResult } from "./client";
 
@@ -131,10 +131,12 @@ export async function runSecondOpinion(
   const started = Date.now();
   const profileHash = profileHashOf(opts.profile, opts.model);
   const offers = opinionsToScore(db, { profileHash, ...(opts.limit === undefined ? {} : { limit: opts.limit }) });
-  const skipped =
-    opts.limit === undefined
-      ? 0
-      : Math.max(0, countOpinionsToScore(db, profileHash) - offers.length);
+  const skipped = db
+    .query<{ n: number }, [string]>(
+      `SELECT COUNT(*) AS n FROM offers o WHERE EXISTS
+       (SELECT 1 FROM offer_opinions op WHERE op.offer_id = o.id AND op.profile_hash = ?)`,
+    )
+    .get(profileHash)!.n;
   const now = opts.now ?? (() => new Date().toISOString());
   const postJson = opts.postJson ?? defaultPostJson;
   const state = await runLoop(offers, async (offer) => {
