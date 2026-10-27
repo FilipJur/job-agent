@@ -309,7 +309,14 @@ export function App() {
                 <AgenciesView agencies={agencies} savingId={savingAgency} onSave={saveAgency} />
               </>
             )}
-            {view === "triage" && <TriageView onError={showError} onMissingFacts={goProfile} />}
+            {view === "triage" && (
+              <TriageView
+                onError={showError}
+                onMissingFacts={goProfile}
+                onCounts={({ remaining }) => setTriageRemaining(remaining)}
+                reloadKey={reload}
+              />
+            )}
             {view === "pipeline" && <PipelineView onError={showError} />}
             {view === "market" && <MarketView onError={showError} />}
             {view === "profile" && <ProfileView onError={showError} />}

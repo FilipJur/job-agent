@@ -9,7 +9,7 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
   const [text, setText] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
   const [saving, setSaving] = useState(false);
-
+  const [proposalKey, setProposalKey] = useState(0);
   const load = useCallback(async (signal: AbortSignal) => {
     const profile = await fetchProfile(signal);
     setText(profile.text);
@@ -41,6 +41,7 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
       const profile = await saveProfile(text);
       setText(profile.text);
       setPending(profile.pending);
+      setProposalKey((key) => key + 1);
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Profil se nepodařilo uložit");
     } finally {
@@ -49,7 +50,7 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
   };
   return (
     <section className="grid gap-3">
-      <ProposalPanel onError={onError} onApplied={reload} />
+      <ProposalPanel onError={onError} onApplied={reload} refreshKey={proposalKey} />
       <FactsEditor onError={onError} />
       <fieldset className="border border-line px-3 pb-3 sm:px-4">
         <legend className="text-[0.75rem] font-medium tracking-[0.2em] text-faint uppercase">profile.md</legend>

@@ -87,7 +87,7 @@ function ProposalDiff({ base, next }: { base: string; next: string }) {
   );
 }
 
-export function ProposalPanel({ onApplied, onError }: { onApplied: () => void; onError: (message: string) => void }) {
+export function ProposalPanel({ onApplied, onError, refreshKey = 0 }: { onApplied: () => void; onError: (message: string) => void; refreshKey?: number }) {
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -101,7 +101,7 @@ export function ProposalPanel({ onApplied, onError }: { onApplied: () => void; o
         if (!controller.signal.aborted) onError(cause instanceof Error ? cause.message : "Návrhy se nepodařilo načíst");
       });
     return () => controller.abort();
-  }, [onError]);
+  }, [onError, refreshKey]);
 
   if (proposals === null || proposals.length === 0) return null;
 
