@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { join, resolve, sep } from "node:path";
 import { openDb } from "../db";
 import { readProfile, writeProfile } from "../profile";
-import { countOffersToScore, listAgencies, listOffers, saveFeedback, updateAgency } from "../repo";
+import { countOffersToScore, listAgencies, listAspirations, listOffers, saveFeedback, updateAgency } from "../repo";
 import { profileHashOf } from "../scoring/run";
 import { scoreModel } from "../scoring/config";
 import type { AgencyPatch, AgencyStatus } from "../types";
@@ -164,6 +164,9 @@ async function route(req: Request, db: Database): Promise<Response> {
 
   if (path === "/api/offers") {
     return method === "GET" || method === "HEAD" ? offers(db, url) : fail(405, "use GET");
+  }
+  if (path === "/api/aspirations") {
+    return method === "GET" || method === "HEAD" ? json(listAspirations(db)) : fail(405, "use GET");
   }
   const feedback = /^\/api\/offers\/([^/]+)\/feedback$/.exec(path);
   if (feedback) {
