@@ -378,6 +378,12 @@ if (import.meta.main) {
     throw new Error(`PORT must be an integer between 1 and 65535, got ${process.env.PORT}`);
   }
   const db = openDb(dbPath);
-  const server = Bun.serve({ port, hostname: process.env.HOST ?? "127.0.0.1", fetch: (req) => handle(req, db) });
+  // A draft waits on the model (up to 60 s), so the 10 s default idle timeout would cut it off.
+  const server = Bun.serve({
+    port,
+    hostname: process.env.HOST ?? "127.0.0.1",
+    idleTimeout: 255,
+    fetch: (req) => handle(req, db),
+  });
   console.log(`job-agent web on http://${server.hostname}:${server.port} (db: ${dbPath})`);
 }
