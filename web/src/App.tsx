@@ -131,8 +131,8 @@ export function App() {
     <MotionConfig reducedMotion="user">
       <header className="sticky top-0 z-10 border-b border-line bg-bg">
         <div className="mx-auto flex max-w-[108ch] items-center justify-between gap-4 px-4">
-          <h1 className="hidden text-sm text-faint sm:block">
-            <span className="text-signal">$</span> job-agent
+          <h1 className="hidden text-[0.75rem] font-semibold tracking-[0.3em] text-faint uppercase sm:block">
+            <span className="mr-[1ch] text-signal">$</span>job-agent
           </h1>
           <nav className="-mx-4 flex overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Sekce">
             {TABS.map((tab) => (
@@ -141,7 +141,7 @@ export function App() {
                 type="button"
                 role="tab"
                 aria-selected={view === tab.key}
-                className="relative px-3 py-2 text-sm whitespace-nowrap text-muted transition-colors hover:text-fg aria-selected:text-bg"
+                className="relative px-3 py-2 text-xs font-medium tracking-[0.14em] whitespace-nowrap text-muted uppercase transition-colors hover:text-fg aria-selected:text-bg aria-selected:font-semibold"
                 onClick={() => selectView(tab.key)}
               >
                 {view === tab.key && (
@@ -151,7 +151,7 @@ export function App() {
                     transition={{ duration: 0.12, ease: "linear" }}
                   />
                 )}
-                <span className="relative">{tab.label.toLowerCase()}</span>
+                <span className="relative">{tab.label}</span>
               </button>
             ))}
           </nav>
@@ -162,7 +162,7 @@ export function App() {
         {error !== null && (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border border-bad px-3 py-1.5 text-sm" role="alert">
             <span>
-              <span className="text-bad">ERR</span> {error}
+              <span className="mr-[1ch] text-[0.75rem] font-semibold tracking-[0.16em] text-bad uppercase">err</span>{error}
             </span>
             <span className="flex gap-4">
               <button type="button" className={linkButton} onClick={() => setReload((value) => value + 1)}>
@@ -224,8 +224,8 @@ export function App() {
       </main>
       <footer className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-bg">
         <div className="mx-auto flex max-w-[108ch] items-center justify-between gap-4 px-4">
-          <span className="bg-signal px-2 text-xs font-semibold text-bg">{view.toUpperCase()}</span>
-          <span className="hidden text-xs text-faint sm:block">
+          <span className="bg-signal px-2 text-[0.75rem] font-semibold tracking-[0.2em] text-bg">{view.toUpperCase()}</span>
+          <span className="hidden text-[0.75rem] tracking-[0.06em] text-faint sm:block">
             {isOffers
               ? "j/k pohyb · u d r h verdikt · o otevřít · / hledat · esc zrušit"
               : view === "agencies"

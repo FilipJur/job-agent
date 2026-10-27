@@ -12,7 +12,7 @@ export const linkButton = "text-sm text-fg underline decoration-line-strong unde
 
 /** Inverse video: the one filled button. */
 export const primaryButton =
-  "inline-flex h-8 items-center justify-center bg-signal px-3 text-sm font-semibold text-bg no-underline transition-colors hover:bg-fg hover:text-bg disabled:opacity-50";
+  "inline-flex h-8 items-center justify-center bg-signal px-3 text-xs font-semibold tracking-[0.12em] text-bg uppercase no-underline transition-colors hover:bg-fg hover:text-bg disabled:opacity-50";
 
 /** Checkbox-style toggle; pair with the `cb` utility. */
 export const checkbox = "text-sm text-muted transition-colors hover:text-fg aria-pressed:text-fg";
@@ -24,7 +24,14 @@ export const radio = "text-sm text-muted transition-colors hover:text-fg aria-pr
 export const meta =
   "flex flex-wrap items-center gap-x-2 text-sm text-muted [&>span:not(:last-child)]:after:ml-2 [&>span:not(:last-child)]:after:text-line-strong [&>span:not(:last-child)]:after:content-['│']";
 
-export const fieldLabel = "text-xs text-faint";
+/** Chrome label: tiny, tracked, uppercase. Short text only. */
+export const fieldLabel = "text-[0.75rem] font-medium tracking-[0.16em] text-faint uppercase";
+
+/** Inline tag (source, verdict, fit): same voice as labels, a touch tighter. */
+export const tag = "text-[0.75rem] font-medium tracking-[0.12em] uppercase";
+
+/** Commentary voice: the model's remarks, quotes, hints. Italic is reserved for this. */
+export const note = "italic";
 
 /** Row of box-drawing characters used as a horizontal rule; clipped, never wraps. */
 export const RULE = "─".repeat(300);

@@ -1,14 +1,24 @@
 @import "@fontsource/ibm-plex-mono/400.css";
 @import "@fontsource/ibm-plex-mono/500.css";
 @import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/ibm-plex-mono/400-italic.css";
+@import "@fontsource/ibm-plex-mono/500-italic.css";
 @import "tailwindcss";
 
 /*
  * DESIGN RULES: cold, sterile terminal. Test for every element: "would a real terminal do this?"
- * - One monospace face everywhere; the page is a character grid (ch / lh), not a pixel layout.
+ * - One monospace family everywhere; the page is a character grid (ch / lh), not a pixel layout.
+ *   Hierarchy comes from four levers inside that family, each with ONE job:
+ *     UPPERCASE + wide tracking (0.12-0.3em, 12px) = chrome: legends, field labels, tabs, tags, buttons, mode tag.
+ *     Weight (400 / 500 / 600)                         = data importance: title 600, company 500, rest 400.
+ *     Size                                             = only for the title and the score numeral.
+ *     Italic                                           = commentary only: the model's reason, quoted evidence,
+ *                                                        hints and empty states. Never titles, numbers, controls,
+ *                                                        user input or labels. If it is data, it is upright.
  * - Structure from lines and characters: 1px rules, fieldset legends cut into frames, [x] / (•) controls,
  *   block-character score bars, inverse video for the active thing. Corners are square: radius 0.
  * - No gradients, shadows, glow, scanlines, grain, icons, emoji, or decorative loops. No green phosphor nostalgia.
+ * - Tracked caps are for short labels only (<= ~3 words); prose is never uppercase or tracked.
  * - Cold palette on blue-black: grey-blue text, one ice-cyan signal for selection and action.
  * - Motion is instant or near-instant (<= 120 ms), opacity only. Terminals do not slide.
  */
@@ -68,7 +78,7 @@
 @layer base {
   html {
     color-scheme: dark;
-    font-size: 14px;
+    font-size: 16px;
     -webkit-text-size-adjust: 100%;
   }
 

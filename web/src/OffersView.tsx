@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 import { formatDate, formatDateTime, formatSalary, WORKPLACE_LABELS } from "./format";
-import { linkButton, meta } from "./ui";
+import { linkButton, meta, note, tag } from "./ui";
 import type { OfferRow, Verdict } from "./types";
 
 interface FeedbackAction {
@@ -42,7 +42,7 @@ function ScoreBar({ score }: { score: number | undefined }) {
       role="img"
       aria-label={score === undefined ? "Nehodnoceno" : `Skóre ${score} z 10`}
     >
-      <span className={score === undefined ? "text-faint" : "score-ink font-semibold"}>
+      <span className={score === undefined ? "text-faint" : "score-ink text-xl leading-none font-semibold"}>
         {score === undefined ? "--" : String(score).padStart(2, "0")}
       </span>
       <span aria-hidden="true">
@@ -83,7 +83,7 @@ function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowP
       <div className="grid min-w-0 gap-1 col-start-2">
         <div className="flex flex-wrap items-baseline gap-x-[2ch] gap-y-0.5">
           <ScoreBar score={score?.score} />
-          <h2 className="min-w-[20ch] flex-1 text-base leading-snug font-semibold text-balance">
+          <h2 className="min-w-[20ch] flex-1 text-[1.125rem] leading-snug font-semibold text-balance">
             <a
               className="text-fg no-underline decoration-signal hover:underline"
               href={offer.url}
@@ -96,28 +96,28 @@ function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowP
         </div>
 
         <p className={meta}>
-          {offer.company !== null && <span className="text-fg">{offer.company}</span>}
+          {offer.company !== null && <span className="font-medium text-fg">{offer.company}</span>}
           <span>{offer.city ?? "bez města"}</span>
           <span>{WORKPLACE_LABELS[offer.workplace]}</span>
           {salary !== null && <span className="text-fg/80">{salary}</span>}
-          <span className="text-faint">{offer.source}</span>
+          <span className={`${tag} text-faint`}>{offer.source}</span>
           <span className="text-faint" title={formatDateTime(offer.firstSeenAt)}>
             {formatDate(offer.firstSeenAt)}
           </span>
-          {offer.partial && <span className="text-bad">neúplný inzerát</span>}
-          {verdictTag && <span className={verdictTag.className}>{verdictTag.text}</span>}
+          {offer.partial && <span className={`${tag} text-bad`}>neúplný inzerát</span>}
+          {verdictTag && <span className={`${tag} ${verdictTag.className}`}>{verdictTag.text}</span>}
         </p>
 
-        {score !== null && score.reason.length > 0 && <p className="max-w-[84ch] text-fg/90 text-pretty">{score.reason}</p>}
+        {score !== null && score.reason.length > 0 && <p className={`${note} max-w-[84ch] text-fg/90 text-pretty`}>{score.reason}</p>}
         {score !== null && score.gaps.length > 0 && (
           <p className="max-w-[84ch] text-sm text-muted text-pretty">
-            <span className="text-faint">chybí: </span>
+            <span className={`${tag} mr-[1ch] text-faint`}>chybí</span>
             {score.gaps}
           </p>
         )}
 
         {offer.labels.length > 0 && (
-          <ul className="flex flex-wrap gap-x-[1.5ch] text-xs text-faint" aria-label="Štítky">
+          <ul className="flex flex-wrap gap-x-[1.5ch] text-xs tracking-[0.04em] text-faint" aria-label="Štítky">
             {offer.labels.map((label) => (
               <li key={label}>{label}</li>
             ))}
@@ -125,7 +125,7 @@ function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowP
         )}
 
         {offer.feedback?.reason != null && offer.feedback.reason.length > 0 && (
-          <p className="text-sm text-muted">poznámka: {offer.feedback.reason}</p>
+          <p className="text-sm text-muted"><span className={`${tag} mr-[1ch] text-faint`}>poznámka</span><span className={note}>{offer.feedback.reason}</span></p>
         )}
 
         <div
@@ -139,7 +139,7 @@ function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowP
               <button
                 key={action.verdict}
                 type="button"
-                className="text-sm text-muted transition-colors hover:text-signal disabled:opacity-50 aria-pressed:bg-signal aria-pressed:text-bg"
+                className="text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal disabled:opacity-50 aria-pressed:bg-signal aria-pressed:text-bg"
                 aria-pressed={active}
                 aria-label={action.title}
                 title={`${action.title} (${action.key})`}
@@ -241,11 +241,11 @@ export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset
       {offers.length === 0 && (
         <div className="grid max-w-[60ch] gap-2 py-10 text-muted">
           {totalLoaded === 0 ? (
-            <p>$ ls nabídky/ <br />(prázdné) Nabídky se objeví po dalším běhu <code className="text-fg">collect</code>.</p>
+            <p>$ ls nabídky/ <br /><span className={note}>(prázdné) Nabídky se objeví po dalším běhu <code className="not-italic text-fg">collect</code>.</span></p>
           ) : (
             <>
-              <p>0 výsledků. Zkus ubrat štítek nebo snížit minimální skóre.</p>
-              <button type="button" className={`${linkButton} justify-self-start`} onClick={onReset}>
+              <p><span className={`${tag} text-faint`}>0 výsledků</span><br /><span className={note}>Zkus ubrat štítek nebo snížit minimální skóre.</span></p>
+              <button type="button" className={`${linkButton} ${tag} justify-self-start`} onClick={onReset}>
                 zrušit filtry
               </button>
             </>

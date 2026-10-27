@@ -41,7 +41,7 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
   return (
     <section className="grid gap-3">
       <fieldset className="border border-line px-3 pb-3 sm:px-4">
-        <legend className="text-xs text-faint">profile.md</legend>
+        <legend className="text-[0.75rem] font-medium tracking-[0.2em] text-faint uppercase">profile.md</legend>
         <textarea
           className="min-h-96 w-full resize-y bg-transparent text-sm leading-relaxed text-fg outline-none"
           aria-label="Profil"
@@ -55,8 +55,8 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
           uložit
         </button>
       </div>
-      <p className="text-sm text-muted">čeká na přehodnocení: {offerCount(pending)}</p>
-      <p className="text-sm text-muted [&_code]:text-fg">přehodnotí se při příštím <code>daily</code> nebo <code>bun run score</code>.</p>
+      <p className="text-sm text-muted"><span className="text-[0.75rem] font-medium tracking-[0.16em] text-faint uppercase">čeká na přehodnocení</span> {offerCount(pending)}</p>
+      <p className="text-sm text-muted italic [&_code]:text-fg [&_code]:not-italic">přehodnotí se při příštím <code>daily</code> nebo <code>bun run score</code>.</p>
     </section>
   );
 }

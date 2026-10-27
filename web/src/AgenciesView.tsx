@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { crawlStatus, STATUS_LABELS, STATUSES, toDateInput, withHttps } from "./format";
-import { control, fieldLabel, linkButton, primaryButton, RULE, selectControl, selectWrap } from "./ui";
+import { control, fieldLabel, linkButton, note, primaryButton, RULE, selectControl, selectWrap, tag } from "./ui";
 import type { AgencyPatch, AgencyRow, AgencyStatus } from "./types";
 
 interface AgencyItemProps {
@@ -33,7 +33,7 @@ function AgencyItem({ agency, saving, onSave }: AgencyItemProps) {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.12 }}
     >
-      <legend className="max-w-full text-base font-semibold">
+      <legend className="max-w-full text-[1.125rem] font-semibold">
         {agency.web !== null ? (
           <a className="no-underline hover:underline" href={withHttps(agency.web)} {...external}>
             {agency.name}
@@ -41,7 +41,7 @@ function AgencyItem({ agency, saving, onSave }: AgencyItemProps) {
         ) : (
           agency.name
         )}
-        <span className="ml-3 text-xs font-normal text-faint" title="Shoda s profilem">
+        <span className={`${tag} ml-3 font-normal text-faint`} title="Shoda s profilem">
           fit {agency.fit}
         </span>
       </legend>
@@ -49,28 +49,28 @@ function AgencyItem({ agency, saving, onSave }: AgencyItemProps) {
       <div className="grid content-start gap-1">
         {(agency.city !== null || agency.focus !== null) && (
           <p className="text-sm text-muted text-pretty">
-            {agency.city !== null && <span className="text-fg">{agency.city}</span>}
+            {agency.city !== null && <span className="font-medium text-fg">{agency.city}</span>}
             {agency.city !== null && agency.focus !== null && " │ "}
             {agency.focus}
           </p>
         )}
-        {agency.stack !== null && <p className="text-xs text-faint text-pretty">{agency.stack}</p>}
+        {agency.stack !== null && <p className="text-xs tracking-[0.04em] text-faint text-pretty">{agency.stack}</p>}
       </div>
 
       <div className="grid content-start gap-2">
         {(agency.hiringIco || agency.hourlyRate !== null) && (
           <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-            {agency.hiringIco && <span className="bg-signal px-1.5 font-semibold text-bg">hledají na IČO</span>}
+            {agency.hiringIco && <span className={`${tag} bg-signal px-1.5 !font-semibold text-bg`}>hledají na IČO</span>}
             {agency.hourlyRate !== null && <span className="text-ok">{agency.hourlyRate}</span>}
           </p>
         )}
         {agency.hiringEvidence !== null && (
-          <blockquote className="text-sm text-fg/85 text-pretty before:mr-[1ch] before:text-signal before:content-['>']">
+          <blockquote className={`${note} text-sm text-fg/85 text-pretty before:mr-[1ch] before:text-signal before:not-italic before:content-['>']`}>
             {agency.hiringEvidence}
             {agency.careersUrl !== null && (
               <>
                 {" "}
-                <a className="text-xs whitespace-nowrap" href={withHttps(agency.careersUrl)} {...external}>
+                <a className={`${tag} not-italic whitespace-nowrap`} href={withHttps(agency.careersUrl)} {...external}>
                   [zdroj ↗]
                 </a>
               </>
@@ -82,7 +82,7 @@ function AgencyItem({ agency, saving, onSave }: AgencyItemProps) {
             kariérní stránka ↗
           </a>
         )}
-        <p className="text-xs text-faint" title={agency.crawledAt ?? undefined}>
+        <p className={`${tag} text-faint`} title={agency.crawledAt ?? undefined}>
           {crawlStatus(agency.crawledAt)}
         </p>
       </div>
@@ -144,7 +144,7 @@ function AgencyItem({ agency, saving, onSave }: AgencyItemProps) {
       <label className="grid gap-1 @3xl:col-span-3">
         <span className={fieldLabel}>poznámky</span>
         <textarea
-          className={`${control} field-sizing-content h-auto min-h-8 resize-y py-1.5 placeholder:text-faint`}
+          className={`${control} field-sizing-content h-auto min-h-8 resize-y py-1.5 placeholder:text-faint placeholder:italic`}
           value={notes}
           disabled={saving}
           aria-label={`Poznámky pro ${agency.name}`}
@@ -171,7 +171,7 @@ export function AgenciesView({ agencies, savingId, onSave }: AgenciesViewProps) 
     return (
       <p className="max-w-[60ch] py-10 text-muted">
         $ ls agentury/ <br />
-        (prázdné) Naplní to <code className="text-fg">bun run agencies:seed</code>.
+        <span className={note}>(prázdné) Naplní to <code className="not-italic text-fg">bun run agencies:seed</code>.</span>
       </p>
     );
   }
@@ -180,19 +180,19 @@ export function AgenciesView({ agencies, savingId, onSave }: AgenciesViewProps) 
 
   const renderSection = (title: string, rows: AgencyRow[], empty: string) => (
     <section className="mb-8 @container" aria-label={title}>
-      <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold" aria-label={`${title} (${rows.length})`}>
+      <h2 className="mb-4 flex items-center gap-2 text-xs font-semibold tracking-[0.2em] uppercase" aria-label={`${title} (${rows.length})`}>
         <span aria-hidden="true" className="text-line-strong">
           ──
         </span>
         <span>
-          {title} <span className="font-normal text-faint tabular-nums">({rows.length})</span>
+          {title} <span className="font-normal tracking-normal text-faint tabular-nums">({rows.length})</span>
         </span>
         <span aria-hidden="true" className="min-w-0 flex-1 overflow-hidden text-line-strong select-none">
           {RULE}
         </span>
       </h2>
       {rows.length === 0 ? (
-        <p className="text-sm text-muted">{empty}</p>
+        <p className={`${note} text-sm text-muted`}>{empty}</p>
       ) : (
         <div className="grid gap-5">
           {rows.map((agency) => (

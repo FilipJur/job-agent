@@ -3,7 +3,7 @@ import type { OfferFilters } from "./api";
 import { activeFilterCount, labelCounts, MIN_SCORES, sourceCounts } from "./filters";
 import type { ClientFilters, SortKey } from "./filters";
 import { offerRatio } from "./format";
-import { checkbox, control, fieldLabel, linkButton, radio, selectControl, selectWrap } from "./ui";
+import { checkbox, control, fieldLabel, linkButton, radio, selectControl, selectWrap, tag } from "./ui";
 import type { OfferRow } from "./types";
 
 const SERVER_TOGGLES: { key: keyof OfferFilters; label: string }[] = [
@@ -52,16 +52,16 @@ export function OfferFilterBar({
 
   return (
     <fieldset className="mb-5 border border-line px-3 pt-0 pb-3 sm:px-4" aria-label="Filtry nabídek">
-      <legend className="text-xs text-faint">filtry{activeCount > 0 ? ` · ${activeCount}` : ""}</legend>
+      <legend className={fieldLabel}>filtry{activeCount > 0 ? ` · ${activeCount}` : ""}</legend>
 
       <div className="flex items-center justify-between gap-3 sm:hidden">
-        <button type="button" className={`${control} text-sm`} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-          {open ? "[-] skrýt filtry" : "[+] zobrazit filtry"}
+        <button type="button" className={control} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+          <span className={tag}>{open ? "[-] skrýt filtry" : "[+] zobrazit filtry"}</span>
         </button>
         <span className="text-xs text-muted tabular-nums">{offerRatio(shown, offers.length)}</span>
       </div>
 
-      <div className={`${open ? "grid" : "hidden"} gap-x-4 gap-y-2 pt-3 sm:grid sm:grid-cols-[7ch_1fr] sm:items-center sm:pt-2`}>
+      <div className={`${open ? "grid" : "hidden"} gap-x-4 gap-y-2 pt-3 sm:grid sm:grid-cols-[10ch_1fr] sm:items-center sm:pt-2`}>
         <span className={`${fieldLabel} hidden sm:block`}>hledat</span>
         <div className="flex flex-wrap items-center gap-2">
           <label className={`${control} flex min-w-48 flex-1 items-center gap-2 focus-within:border-signal`}>
@@ -70,7 +70,7 @@ export function OfferFilterBar({
             </span>
             <input
               type="search"
-              className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-faint [&::-webkit-search-cancel-button]:hidden"
+              className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-faint placeholder:italic [&::-webkit-search-cancel-button]:hidden"
               placeholder="název, firma, důvod   ( / )"
               aria-label="Hledat v nabídkách"
               data-search
@@ -163,7 +163,7 @@ export function OfferFilterBar({
       <p className="mt-3 flex items-center gap-4 text-sm text-muted" aria-live="polite">
         <span className="hidden tabular-nums sm:inline">{offerRatio(shown, offers.length)}</span>
         {activeCount > 0 && (
-          <button type="button" className={linkButton} onClick={onReset}>
+          <button type="button" className={`${linkButton} ${tag}`} onClick={onReset}>
             zrušit filtry
           </button>
         )}
