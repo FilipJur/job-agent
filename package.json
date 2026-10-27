@@ -11,6 +11,7 @@
     "score": "bun run src/cli/score.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
+    "tune": "bun run src/cli/tune.ts",
     "web": "bun run src/web/server.ts",
     "web:build": "vite build --config web/vite.config.ts",
     "web:dev": "vite --config web/vite.config.ts"
