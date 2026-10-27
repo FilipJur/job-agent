@@ -10,7 +10,7 @@ import type { AgencyPatch, AgencyStatus } from "../types";
 /** Paths and values are fixed by the API contract in docs; keep them in one place. */
 const DIST = resolve(import.meta.dir, "../../web/dist");
 const TABS = ["hpp", "kontrakty"] as const;
-const VERDICTS = ["up", "down", "responded", "hidden"] as const;
+const VERDICTS = ["up", "down", "responded", "hidden", "aspiration"] as const;
 const STATUSES = ["new", "contacted", "replied", "meeting", "work", "declined"] as const;
 const AGENCY_FIELDS = ["status", "notes", "lastContactAt"] as const;
 
@@ -62,6 +62,7 @@ function offers(db: Database, url: URL): Response {
   );
 }
 
+/** POST appends a verdict and acknowledges it. */
 async function postFeedback(req: Request, db: Database, id: number): Promise<Response> {
   const parsed = await readObject(req);
   if (!parsed.ok) return parsed.response;
@@ -79,6 +80,14 @@ async function postFeedback(req: Request, db: Database, id: number): Promise<Res
     }
     throw error;
   }
+  return json({ ok: true });
+}
+
+/** DELETE clears the verdict (appends `cleared`). */
+function deleteFeedback(db: Database, id: number): Response {
+  const exists = db.query<{ n: number }, [number]>("SELECT COUNT(*) AS n FROM offers WHERE id = ?").get(id);
+  if (exists?.n !== 1) return fail(404, `offer ${id} not found`);
+  saveFeedback(db, id, "cleared");
   return json({ ok: true });
 }
 
@@ -172,7 +181,9 @@ async function route(req: Request, db: Database): Promise<Response> {
   if (feedback) {
     const id = parseId(feedback[1] ?? "");
     if (id === null) return fail(400, "offer id must be an integer");
-    return method === "POST" ? postFeedback(req, db, id) : fail(405, "use POST");
+    if (method === "POST") return postFeedback(req, db, id);
+    if (method === "DELETE") return deleteFeedback(db, id);
+    return fail(405, "use POST or DELETE");
   }
   if (path === "/api/agencies") {
     return method === "GET" || method === "HEAD" ? json(listAgencies(db)) : fail(405, "use GET");

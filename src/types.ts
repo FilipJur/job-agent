@@ -53,7 +53,9 @@ export interface Collector {
 }
 
 export type Tab = "hpp" | "kontrakty";
-export type Verdict = "up" | "down" | "responded" | "hidden";
+export type Verdict = "up" | "down" | "responded" | "hidden" | "aspiration";
+/** Verdicts stored in the `feedback` table: the UI verdicts plus `cleared`, which cancels the previous verdict. */
+export type FeedbackVerdict = Verdict | "cleared";
 export type AgencyStatus = "new" | "contacted" | "replied" | "meeting" | "work" | "declined";
 
 export interface OfferScore {
@@ -95,7 +97,7 @@ export interface OfferRow {
   feedback: OfferFeedback | null;
 }
 
-/** One row of the Aspirations tab: the latest score verdict is 'aspiration'. */
+/** One row of the Aspirations tab: user `aspiration` feedback or the model's `aspiration` verdict. */
 export interface AspirationRow {
   id: number;
   title: string;
@@ -104,10 +106,12 @@ export interface AspirationRow {
   city: string | null;
   workplace: Workplace;
   locationText: string | null;
-  score: number;
+  score: number | null;
   reason: string;
   direction: string;
   gaps: string;
+  blocker: string;
+  source: "ai" | "user";
   labels: string[];
   model: string;
   scoredAt: string;

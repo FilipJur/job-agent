@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { openDb } from "../src/db";
-import { countOffersToScore, listAgencies, listOffers, offersToScore, saveAgencyCrawl, saveFeedback, saveScore, seedAgencies, updateAgency } from "../src/repo";
+import { countOffersToScore, listAgencies, listAspirations, listOffers, offersToScore, saveAgencyCrawl, saveFeedback, saveScore, seedAgencies, updateAgency } from "../src/repo";
 
 let db: Database;
 let seq = 0;
@@ -29,12 +29,28 @@ function offer(over: { labels?: string[]; workplace?: string; firstSeenAt?: stri
 }
 
 function scored(offerId: number, score: number, at: string, profileHash = "p1"): void {
-  db.run("INSERT INTO offer_scores (offer_id, score, reason, gaps, model, profile_hash, scored_at) VALUES (?, ?, 'r', 'g', 'm', ?, ?)", [
-    offerId,
-    score,
-    profileHash,
-    at,
-  ]);
+  scoredVerdict(offerId, "fit", score, at, profileHash);
+}
+
+function scoredVerdict(offerId: number, verdict: string, score: number, at: string, profileHash = "p1"): void {
+  db.run(
+    "INSERT INTO offer_scores (offer_id, score, reason, gaps, model, profile_hash, verdict, blocker, direction, scored_at) VALUES (?, ?, 'r', 'g', 'm', ?, ?, 'b', 'd', ?)",
+    [offerId, score, profileHash, verdict, at],
+  );
+}
+
+function scoredBlocked(offerId: number, blocker: string, at = "2026-10-26T11:00:00.000Z"): void {
+  db.run(
+    "INSERT INTO offer_scores (offer_id, score, reason, gaps, model, profile_hash, verdict, blocker, direction, scored_at) VALUES (?, 3, 'r', 'g', 'm', 'p1', 'blocked', ?, '', ?)",
+    [offerId, blocker, at],
+  );
+}
+
+function scoredAspiration(offerId: number, direction: string, at = "2026-10-26T11:00:00.000Z"): void {
+  db.run(
+    "INSERT INTO offer_scores (offer_id, score, reason, gaps, model, profile_hash, verdict, blocker, direction, scored_at) VALUES (?, 8, 'r', 'g', 'm', 'p1', 'aspiration', 'b', ?, ?)",
+    [offerId, direction, at],
+  );
 }
 
 function verdict(offerId: number, v: string, at: string): void {
@@ -60,14 +76,17 @@ describe("listOffers tabs", () => {
     expect(listOffers(db, { tab: "kontrakty" })).toHaveLength(2);
   });
 
-  test("hidden offers are left out unless includeHidden", () => {
+  test("hidden view lists user-hidden plus model-blocked offers with their reasons", () => {
     const a = offer({ labels: ["hpp"] });
     verdict(a, "hidden", "2026-10-26T11:00:00.000Z");
+    const b = offer({ labels: ["hpp"] });
+    scoredBlocked(b, "onsite NYC");
 
     expect(listOffers(db, { tab: "hpp" })).toHaveLength(0);
     const shown = listOffers(db, { tab: "hpp", includeHidden: true });
-    expect(ids(shown)).toEqual([a]);
-    expect(shown[0]!.feedback).toMatchObject({ verdict: "hidden" });
+    expect(ids(shown)).toEqual(expect.arrayContaining([a, b]));
+    expect(shown.find((r) => r.id === a)?.feedback).toMatchObject({ verdict: "hidden" });
+    expect(shown.find((r) => r.id === b)?.score).toMatchObject({ verdict: "blocked", blocker: "onsite NYC" });
   });
 
   test("sort is score desc with unscored last; latest score and feedback rows win", () => {
@@ -147,6 +166,63 @@ describe("offersToScore", () => {
     expect(listOffers(db, { tab: "hpp" })).toHaveLength(0);
     saveScore(db, { offerId: id, score: 8, reason: "r", gaps: "g", model: "m", profileHash: "p1", scoredAt: "2026-10-26T12:00:00.000Z", verdict: "fit", blocker: "", direction: "" });
     expect(listOffers(db, { tab: "hpp" })).toHaveLength(1);
+  });
+});
+
+describe("effective offer state", () => {
+  const tabOf = (id: number): "tab" | "hidden" | "aspirations" | "nowhere" => {
+    const places = [
+      listOffers(db, { tab: "hpp" }).some((r) => r.id === id) && "tab",
+      listOffers(db, { tab: "hpp", includeHidden: true }).some((r) => r.id === id) && "hidden",
+      listAspirations(db).some((r) => r.id === id) && "aspirations",
+    ].filter((p) => p !== false);
+    // Exactly one placement must hold.
+    return places.length === 1 ? (places[0] as "tab" | "hidden" | "aspirations") : "nowhere";
+  };
+
+  test("model verdict × user verdict placement, including clear restoring the model placement", () => {
+    // Model × user combinations; null = no user verdict.
+    const cases: { model: "fit" | "blocked" | "aspiration" | null; user: string | null; want: "tab" | "hidden" | "aspirations" }[] = [
+      { model: null, user: null, want: "tab" },
+      { model: "fit", user: null, want: "tab" },
+      { model: "blocked", user: null, want: "hidden" },
+      { model: "aspiration", user: null, want: "aspirations" },
+      { model: "blocked", user: "up", want: "tab" },
+      { model: "blocked", user: "down", want: "tab" },
+      { model: "blocked", user: "responded", want: "tab" },
+      { model: "aspiration", user: "down", want: "tab" },
+      { model: "fit", user: "hidden", want: "hidden" },
+      { model: "aspiration", user: "hidden", want: "hidden" },
+      { model: "blocked", user: "hidden", want: "hidden" },
+      { model: "fit", user: "aspiration", want: "aspirations" },
+      { model: "blocked", user: "aspiration", want: "aspirations" },
+    ];
+    for (const [i, c] of cases.entries()) {
+      const id = offer({ labels: ["hpp"], title: `Offer ${i}` });
+      if (c.model === "fit") scoredVerdict(id, "fit", 7, "2026-10-26T11:00:00.000Z");
+      if (c.model === "blocked") scoredBlocked(id, "onsite NYC");
+      if (c.model === "aspiration") scoredAspiration(id, "learn X");
+      if (c.user !== null) verdict(id, c.user, "2026-10-26T12:00:00.000Z");
+      expect({ model: c.model, user: c.user, got: tabOf(id) }).toMatchObject({ model: c.model, user: c.user, got: c.want });
+    }
+
+    // Clearing restores the model placement: a blocked offer returns to Skryté, a fit one to the tab.
+    const cleared = offer({ labels: ["hpp"], title: "cleared" });
+    scoredBlocked(cleared, "onsite NYC");
+    verdict(cleared, "up", "2026-10-26T12:00:00.000Z");
+    expect(tabOf(cleared)).toBe("tab");
+    saveFeedback(db, cleared, "cleared");
+    expect(tabOf(cleared)).toBe("hidden");
+    const clearedRow = listOffers(db, { tab: "hpp", includeHidden: true }).find((r) => r.id === cleared);
+    expect(clearedRow?.feedback).toBeNull();
+
+    // Aspiration rows carry their source.
+    const ai = offer({ labels: ["hpp"], title: "ai-asp" });
+    scoredAspiration(ai, "learn X");
+    const mine = offer({ labels: ["hpp"], title: "my-asp" });
+    scoredBlocked(mine, "onsite NYC");
+    saveFeedback(db, mine, "aspiration");
+    expect(listAspirations(db).find((r) => r.id === mine)).toMatchObject({ source: "user", blocker: "onsite NYC" });
   });
 });
 

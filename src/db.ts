@@ -65,7 +65,7 @@ CREATE INDEX IF NOT EXISTS idx_offer_scores_offer ON offer_scores (offer_id);
 CREATE TABLE IF NOT EXISTS feedback (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   offer_id   INTEGER NOT NULL REFERENCES offers (id) ON DELETE CASCADE,
-  verdict    TEXT NOT NULL CHECK (verdict IN ('up', 'down', 'responded', 'hidden')),
+  verdict    TEXT NOT NULL CHECK (verdict IN ('up', 'down', 'responded', 'hidden', 'aspiration', 'cleared')),
   reason     TEXT,
   created_at TEXT NOT NULL
 );
@@ -132,5 +132,28 @@ export function openDb(path: string): Database {
   addColumnIfMissing(db, "offer_scores", "blocker", "TEXT");
   addColumnIfMissing(db, "offer_scores", "direction", "TEXT");
   db.run("CREATE INDEX IF NOT EXISTS idx_offer_scores_verdict ON offer_scores (offer_id, verdict)");
+  migrateFeedbackCheck(db);
   return db;
+}
+
+/**
+ * SQLite cannot alter a CHECK: when the `feedback` table predates the
+ * `aspiration`/`cleared` verdicts, rebuild it in one transaction and keep all rows.
+ */
+function migrateFeedbackCheck(db: Database): void {
+  const row = db.query<{ sql: string | null }, []>("SELECT sql FROM sqlite_master WHERE name = 'feedback'").get();
+  if (row?.sql?.includes("'aspiration'")) return;
+  db.transaction(() => {
+    db.run(`CREATE TABLE feedback_new (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      offer_id   INTEGER NOT NULL REFERENCES offers (id) ON DELETE CASCADE,
+      verdict    TEXT NOT NULL CHECK (verdict IN ('up', 'down', 'responded', 'hidden', 'aspiration', 'cleared')),
+      reason     TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    db.run("INSERT INTO feedback_new (id, offer_id, verdict, reason, created_at) SELECT id, offer_id, verdict, reason, created_at FROM feedback");
+    db.run("DROP TABLE feedback");
+    db.run("ALTER TABLE feedback_new RENAME TO feedback");
+    db.run("CREATE INDEX IF NOT EXISTS idx_feedback_offer ON feedback (offer_id)");
+  })();
 }

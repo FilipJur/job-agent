@@ -3,6 +3,7 @@ export type {
   AgencyRow,
   AspirationRow,
   AgencyStatus,
+  FeedbackVerdict,
   OfferFeedback,
   OfferRow,
   OfferScore,

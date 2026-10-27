@@ -43,13 +43,21 @@ export async function fetchOffers(
   return request<OfferRow[]>(`/api/offers?${params.toString()}`, { signal });
 }
 
-export async function saveFeedback(offerId: number, verdict: Verdict): Promise<void> {
+/** Clicking the active verdict clears it (DELETE); otherwise appends the new verdict. Returns the verdict to show as active, if any. */
+export async function toggleFeedback(offerId: number, verdict: Verdict, active: boolean): Promise<Verdict | null> {
+  if (active) {
+    await request<unknown>(`/api/offers/${offerId}/feedback`, { method: "DELETE" });
+    return null;
+  }
   await request<unknown>(`/api/offers/${offerId}/feedback`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ verdict }),
   });
+  return verdict;
 }
+
+
 
 export async function fetchAgencies(signal: AbortSignal): Promise<AgencyRow[]> {
   return request<AgencyRow[]>("/api/agencies", { signal });

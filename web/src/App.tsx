@@ -1,6 +1,6 @@
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchAgencies, fetchAspirations, fetchOffers, patchAgency, saveFeedback } from "./api";
+import { fetchAgencies, fetchAspirations, fetchOffers, patchAgency, toggleFeedback } from "./api";
 import type { OfferFilters } from "./api";
 import { AgenciesView } from "./AgenciesView";
 import { AspirationsView } from "./AspirationsView";
@@ -15,12 +15,12 @@ import type { AgencyPatch, AgencyRow, AspirationRow, OfferRow, Tab, Verdict } fr
 
 type View = Tab | "aspirace" | "agencies" | "profile";
 
-const TABS: { key: View; label: string }[] = [
+const TABS: { key: View; label: string; aside?: boolean }[] = [
   { key: "hpp", label: "HPP" },
   { key: "kontrakty", label: "Kontrakty" },
-  { key: "aspirace", label: "Aspirace" },
   { key: "agencies", label: "Agentury" },
   { key: "profile", label: "Profil" },
+  { key: "aspirace", label: "Aspirace", aside: true },
 ];
 
 const NO_SERVER_FILTERS: OfferFilters = { onlyNew: false, remote: false, olomouc: false, hidden: false };
@@ -138,11 +138,11 @@ export function App() {
     setClientFilters(NO_CLIENT_FILTERS);
   };
 
-  const sendFeedback = async (offer: OfferRow, verdict: Verdict) => {
-    setPendingOffer(offer.id);
+  const sendFeedback = async (id: number, verdict: Verdict, active: boolean) => {
+    setPendingOffer(id);
     setError(null);
     try {
-      await saveFeedback(offer.id, verdict);
+      await toggleFeedback(id, verdict, active);
       setReload((value) => value + 1);
     } catch (cause) {
       setError(`Uložení zpětné vazby selhalo: ${errorText(cause)}`);
@@ -181,7 +181,7 @@ export function App() {
                 type="button"
                 role="tab"
                 aria-selected={view === tab.key}
-                className="relative px-3 py-2 text-xs font-medium tracking-[0.14em] whitespace-nowrap text-muted uppercase transition-colors hover:text-fg aria-selected:text-bg aria-selected:font-semibold"
+                className={`relative px-3 py-2 text-xs font-medium tracking-[0.14em] whitespace-nowrap uppercase transition-colors hover:text-fg aria-selected:text-bg aria-selected:font-semibold${tab.aside ? " ml-[2ch] border-l border-line pl-[calc(0.75rem+2ch)]" : " text-muted"}`}
                 onClick={() => selectView(tab.key)}
               >
                 {view === tab.key && (
@@ -243,7 +243,7 @@ export function App() {
                       offers={visible}
                       totalLoaded={rows.length}
                       pendingId={pendingOffer}
-                      onFeedback={(offer, verdict) => void sendFeedback(offer, verdict)}
+                      onFeedback={(offer, verdict) => void sendFeedback(offer.id, verdict, offer.feedback?.verdict === verdict)}
                       onReset={resetFilters}
                     />
                   </>
@@ -252,10 +252,18 @@ export function App() {
             )}
             {view === "aspirace" && (
               <>
-                <p className="mb-4 text-sm text-muted tabular-nums" aria-live="polite">
-                  {loading ? "načítám…" : aspirations === null ? "" : offerRatio(aspirations.length, aspirations.length)}
-                </p>
-                {aspirations !== null && <AspirationsView rows={aspirations} />}
+                {aspirations !== null && (
+                  <AspirationsView
+                    rows={aspirations}
+                    pendingId={pendingOffer}
+                    onFeedback={(id, verdict) =>
+                      void sendFeedback(
+                        id,
+                        verdict,
+                        verdict === "aspiration" && aspirations.some((row) => row.id === id && row.source === "user"),
+                      )}
+                  />
+                )}
               </>
             )}
             {view === "agencies" && (
@@ -275,9 +283,9 @@ export function App() {
           <span className="bg-signal px-2 text-[0.75rem] font-semibold tracking-[0.2em] text-bg">{view.toUpperCase()}</span>
           <span className="hidden text-[0.75rem] tracking-[0.06em] text-faint sm:block">
             {isOffers
-              ? "j/k pohyb · u d r h verdikt · o otevřít · / hledat · esc zrušit"
+              ? "j/k pohyb · u d r a h verdikt · o otevřít · / hledat · esc zrušit"
               : view === "aspirace"
-                ? "bez zpětné vazby · mimo současný dosah"
+                ? "klik na aktivní verdikt ho zruší · jiný verdikt vrátí nabídku do práce"
                 : view === "agencies"
                   ? "stav a poznámky se ukládají hned"
                   : "uložit tlačítkem, přehodnocení při dalším scoringu"}
