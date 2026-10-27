@@ -1,7 +1,8 @@
 import { parseArgs } from "node:util";
+import { crawlAgency, isCrawlDue } from "../agencies/crawl";
 import { createHttpClient } from "../collectors/jobscz/http";
 import { openDb } from "../db";
-import { seedAgencies } from "../repo";
+import { listAgencies, saveAgencyCrawl, seedAgencies } from "../repo";
 import type { AgencySeed } from "../types";
 import agencies from "../../config/agencies.json";
 import { createCachedFetch, type HttpMode } from "../http-cache";
@@ -45,6 +46,17 @@ async function main(argv: string[]): Promise<void> {
     // Idempotent: a fresh host gets its agencies, an updated checkout refreshes contact data.
     const seeded = seedAgencies(db, agencies as AgencySeed[]);
     if (seeded.inserted + seeded.updated > 0) console.log(`agencies: inserted ${seeded.inserted}, updated ${seeded.updated}`);
+    // Agency website crawl (7-day rule). A failure is printed, never fails the run.
+    try {
+      const dueAgencies = listAgencies(db).filter((a) => a.web !== null && isCrawlDue(a.crawledAt, Date.now()));
+      for (const a of dueAgencies) {
+        const outcome = await crawlAgency(fetchText, a);
+        saveAgencyCrawl(db, a.id, outcome.crawl);
+      }
+      console.log(`agencies crawl: ${dueAgencies.length} checked`);
+    } catch (e) {
+      console.error(`agencies crawl failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
     const names = Object.keys(COLLECTORS);
     const { due, skipped } = dueSources(db, names, { force });
     if (skipped.length > 0) console.log(`skipped (collected <20h ago): ${skipped.join(", ")}`);

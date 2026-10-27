@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "agencies:crawl": "bun run src/cli/agencies-crawl.ts",
     "agencies:seed": "bun run src/cli/agencies.ts",
     "collect": "bun run src/cli/collect.ts",
     "daily": "bun run src/cli/daily.ts",
