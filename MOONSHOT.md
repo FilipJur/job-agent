@@ -119,7 +119,7 @@ one branch at a time with `bun test && bun run typecheck && bun run web:build` a
 | 3 | Market intelligence + morning digest | `ms3-market-api`, `ms3-market-ui`, `ms3-digest`, fixes `ms3-market-fix` (2 rounds) | ✅ merged: Trh tab (`/api/market`), `bun run digest`, digest last in `daily` |
 | 4 | Application copilot: facts, fact-checked drafts, pipeline | `ms4-copilot-api`, `ms4-copilot-ui` (+1 review fix round each) | ✅ merged: `data/facts.md`, draft panel, Pipeline tab, follow-ups in digest |
 | 5 | Active learning: second-opinion model (deepseek flash) drives Triáž order and model routing evidence | `ms5-second-opinion` (+1 review fix round) | ✅ merged: `offer_opinions`, `bun run score --second`, disagreement-first Triáž, eval opinion column |
-| 6 | Experience: PWA, keyboard, motion polish | `ms6-experience` | planned |
+| 6 | Experience: PWA, keyboard, motion polish | `ms6-experience` (+1 review fix round) | ✅ merged: installable PWA with offline read, `g`-leader + `?` shortcuts, motion, 44 px touch targets |
 
 Every branch from phase 3 fixes on was reviewed by a read-only `reviewer` before merge (`docs/PARALLEL.md`);
 phases 1–3 were reviewed retroactively, fixes in `msr-tune-fix` and `msr-web-fix`.
