@@ -154,10 +154,19 @@ export async function generateProposal(db: Database, opts: GenerateOptions): Pro
     return replay;
   };
   const current = await measure(opts.profile);
+  // `current` covers the hold-out only; the prompt needs the current profile's read on the
+  // training offers it prints, so replay those too (held-out ids stay out of the prompt).
+  const shown =
+    holdout === null
+      ? current
+      : await replayLabeled(db, { ...replayOpts(opts.profile), offerIds: train.map((o) => o.offerId) });
+  if (shown.failed.length > 0) {
+    throw new Error(`replay failed for ${shown.failed.length} offers: ${shown.failed[0]!.error}`);
+  }
 
   const request = {
     model: opts.model,
-    input: [{ role: "user", content: [{ type: "input_text", text: buildPrompt(opts.profile, train, current) }] }],
+    input: [{ role: "user", content: [{ type: "input_text", text: buildPrompt(opts.profile, train, shown) }] }],
     text: { format: { type: "json_schema", name: "profile_proposal", schema: PROPOSAL_SCHEMA } },
   };
   const res = await postJson(opts.endpoint, request, opts.apiKey, opts.sessionId);

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { openDb } from "../src/db";
 import type { PostJson } from "../src/scoring/client";
 import { generateProposal } from "../src/tune/generate";
-import { saveProposal, type StoredProposal } from "../src/tune/proposals";
+import { isTuneDue, markTuneAttempt, saveProposal, type StoredProposal } from "../src/tune/proposals";
 import { handle } from "../src/web/server";
 
 let db: Database;
@@ -141,7 +141,7 @@ describe("generateProposal", () => {
     expect(readdirSync(process.env.PROPOSALS_DIR!)).toEqual(["2026-10-27T10-00-00Z.json"]);
   });
 
-  test("hold-out: the prompt hides held-out offers and replays measure only them", async () => {
+  test("hold-out: the prompt shows training scores and disagreements, never held-out ids", async () => {
     for (let i = 0; i < 30; i += 1) label(`offer ${i}`, i < 15 ? "up" : "down");
     const ids = db.query<{ id: number }, []>("SELECT id FROM offers ORDER BY id").all().map((r) => r.id);
     const held = new Set(ids.filter((id) => id % 3 === 0));
@@ -159,14 +159,25 @@ describe("generateProposal", () => {
       const title = text.split("\n").find((l) => l.startsWith("Název: "))!.slice("Název: ".length);
       scored.add(idOfTitle.get(title)!);
       const good = Number(title.split(" ")[1]!) < 15;
-      const score = text.startsWith("PROPOSED") ? (good ? 9 : 1) : good ? 8 : 2;
-      return reply({ verdict: "fit", score, reason: "r", gaps: "", blocker: "", direction: "", labels: [] });
+      // Current profile mis-scores one training positive low and one training negative high,
+      // so the prompt carries a non-empty disagreement section.
+      const current = title === "offer 1" ? 2 : title === "offer 16" ? 8 : good ? 8 : 2;
+      const score = text.startsWith("PROPOSED") ? (good ? 9 : 1) : current;
+      return reply({ verdict: "fit", score, reason: `důvod ${title}`, gaps: "", blocker: "", direction: "", labels: [] });
     };
     const result = await run(postJson);
     if (result.kind !== "created") throw new Error(result.kind);
     expect(result.proposal.evaluation).toEqual({ kind: "holdout", n: held.size });
     for (const id of held) expect(prompt).not.toContain(`#${id} `);
-    expect(scored).toEqual(held);
+    // Every training offer is printed with its replayed model score; nothing is unscored.
+    expect(prompt).not.toContain("model: neohodnoceno");
+    expect(prompt).toContain("model: skóre 2, verdikt fit; důvod: důvod offer 1");
+    expect(prompt).toContain("model: skóre 8, verdikt fit; důvod: důvod offer 16");
+    expect(prompt).toMatch(/=== NEJHORŠÍ NESHODY ===\n#\d+ offer (1|16): uživatel/);
+    expect(prompt).not.toContain("=== NEJHORŠÍ NESHODY ===\nžádné");
+    // Metrics still measure only the hold-out; replays covered it plus all 20 training offers.
+    expect([...scored].filter((id) => held.has(id))).toHaveLength(held.size);
+    expect([...scored].filter((id) => !held.has(id))).toHaveLength(ids.length - held.size);
   });
 
   test("below the hold-out threshold: in-sample with an honest flag", async () => {
@@ -174,5 +185,42 @@ describe("generateProposal", () => {
     const result = await run(fakeApi(9, 1).postJson);
     if (result.kind !== "created") throw new Error(result.kind);
     expect(result.proposal.evaluation).toEqual({ kind: "in-sample", n: 12 });
+  });
+});
+
+describe("tune cadence", () => {
+  const DAY = 24 * 3600 * 1000;
+  const now = Date.parse("2026-10-27T10:00:00.000Z");
+
+  test("an attempt counts for 7 days even with no proposal file", () => {
+    expect(isTuneDue(now)).toBe(true);
+    markTuneAttempt(now);
+    expect(isTuneDue(now + 6 * DAY)).toBe(false);
+    expect(isTuneDue(now + 7 * DAY)).toBe(true);
+    expect(JSON.parse(readFileSync(join(process.env.PROPOSALS_DIR!, "last-attempt.json"), "utf8"))).toEqual({
+      at: "2026-10-27T10:00:00.000Z",
+    });
+    expect(readdirSync(process.env.PROPOSALS_DIR!).filter((f) => f.endsWith(".json") && f !== "last-attempt.json")).toEqual([]);
+  });
+
+  test("a newer proposal still resets the clock", () => {
+    markTuneAttempt(now - 10 * DAY);
+    expect(isTuneDue(now)).toBe(true);
+    saveProposal({
+      id: "2026-10-27T10-00-00Z",
+      createdAt: "2026-10-27T10:00:00.000Z",
+      status: "discarded",
+      model: "m",
+      rationale: [],
+      changes: [],
+      baseProfile: "CURRENT",
+      profile: "PROPOSED",
+      metrics: {
+        current: { n: 0, positives: 0, negatives: 0, auc: null, precisionAt5: null, precisionAt10: null, meanPositive: null, meanNegative: null },
+        proposed: { n: 0, positives: 0, negatives: 0, auc: null, precisionAt5: null, precisionAt10: null, meanPositive: null, meanNegative: null },
+      },
+    });
+    expect(isTuneDue(now + 6 * DAY)).toBe(false);
+    expect(isTuneDue(now + 7 * DAY)).toBe(true);
   });
 });

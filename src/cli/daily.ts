@@ -12,7 +12,7 @@ import { runScoring } from "../scoring/run";
 import { COLLECTORS, collectSources, dueSources, printRuns } from "./collect";
 import { printResult } from "./tune";
 import { generateProposal } from "../tune/generate";
-import { isTuneDue } from "../tune/proposals";
+import { isTuneDue, markTuneAttempt } from "../tune/proposals";
 import { runDigest } from "../digest/run";
 const { config: scoringConfig, profile } = loadScoringConfig();
 
@@ -104,6 +104,7 @@ async function main(argv: string[]): Promise<void> {
     // Weekly profile proposal; skipped on --limit smoke runs. A failure is printed, never fails the run.
     try {
       if (limit === null && isTuneDue(Date.now())) {
+        markTuneAttempt(Date.now());
         printResult(
           await generateProposal(db, {
             profile,
