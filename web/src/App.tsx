@@ -312,6 +312,7 @@ export function App() {
             {view === "triage" && <TriageView onError={showError} onMissingFacts={goProfile} />}
             {view === "pipeline" && <PipelineView onError={showError} />}
             {view === "market" && <MarketView onError={showError} />}
+            {view === "profile" && <ProfileView onError={showError} />}
           </motion.div>
         </AnimatePresence>
       </main>
