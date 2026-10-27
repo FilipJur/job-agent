@@ -73,14 +73,20 @@ const TECH_TERMS = [
   "typescript", "ui", "ux", "vite", "vue", "webpack", "woocommerce", "wordpress", "wp", "zapier",
 ];
 
-/** Tech/skill terms named in the text, matched on folded word stems. */
-export function techTermsIn(text: string): string[] {
-  const tokens = fold(text)
+/** Folded word tokens, the unit every term and number comparison works on. */
+const tokensOf = (text: string): string[] =>
+  fold(text)
     .split(/[^a-z0-9]+/)
     .filter((t) => t !== "");
-  return TECH_TERMS.filter((term) =>
-    tokens.some((token) => (term.length >= 3 ? token.startsWith(term) : token === term)),
-  );
+
+/** A term names a token by stem (`wordpress` in `wordpressem`); 1–2 letter terms must match whole (`ai`, not `tailwind`). */
+const namesTerm = (term: string, token: string): boolean =>
+  term.length >= 3 ? token.startsWith(term) : token === term;
+
+/** Tech/skill terms named in the text, matched on folded word stems. */
+export function techTermsIn(text: string): string[] {
+  const tokens = tokensOf(text);
+  return TECH_TERMS.filter((term) => tokens.some((token) => namesTerm(term, token)));
 }
 
 /** Numbers as written, `3,5` and `3.5` both `3.5`; thousands separated by a space are joined first. */
@@ -89,17 +95,43 @@ export function numbersIn(text: string): string[] {
   return (joined.match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => n.replace(",", "."));
 }
 
+/**
+ * Spelled-out numbers 2–10 (Czech incl. common inflections, English 2–9) by folded word.
+ * `one`/`ten` and Czech `jeden` are left out: they are ordinary words too.
+ */
+const NUMBER_WORDS: Record<string, string> = {
+  dva: "2", dve: "2", dvou: "2", dvema: "2", two: "2",
+  tri: "3", trech: "3", trem: "3", tremi: "3", three: "3",
+  ctyri: "4", ctyrech: "4", ctyrem: "4", ctyrmi: "4", four: "4",
+  pet: "5", peti: "5", five: "5",
+  sest: "6", sesti: "6", six: "6",
+  sedm: "7", sedmi: "7", seven: "7",
+  osm: "8", osmi: "8", eight: "8",
+  devet: "9", deviti: "9", nine: "9",
+  deset: "10", deseti: "10",
+};
+
+/** Digits and spelled-out numbers as values, so `pět` in a claim needs a `5`/`pět` in the facts. */
+function quantitiesIn(text: string): string[] {
+  const words = tokensOf(text).flatMap((t) => (NUMBER_WORDS[t] === undefined ? [] : [NUMBER_WORDS[t]]));
+  return [...numbersIn(text), ...words];
+}
+
 const KNOWN_KINDS: readonly DraftSentenceKind[] = ["greeting", "claim", "question", "closing"];
 
 /**
  * Deterministic fact check, the core of the copilot: a claim must cite at least one
- * existing fact, its numbers must appear in those facts, and it must share a
- * significant word with them. A greeting/question/closing must not smuggle either a
- * number or a technology that no fact states.
+ * existing fact, its numbers (digits or spelled out) must appear in those facts, it must
+ * share a significant word with them, and every technology it names must be stated by
+ * some fact. A greeting/question/closing must not smuggle either a digit or a technology
+ * that no fact states.
  */
 export function validateSentences(facts: Fact[], raw: RawSentence[]): ValidationResult {
   const byId = new Map(facts.map((f) => [f.id, f]));
-  const factsFold = facts.map((f) => fold(f.text)).join(" \n ");
+  const factTokens = tokensOf(facts.map((f) => f.text).join(" \n "));
+  /** Terms no fact states, checked against all facts so a true but uncited fact still counts. */
+  const unstatedTech = (text: string): string[] =>
+    techTermsIn(text).filter((term) => !factTokens.some((token) => namesTerm(term, token)));
   const sentences: DraftSentence[] = [];
   const dropped: { text: string; why: string }[] = [];
 
@@ -125,8 +157,8 @@ export function validateSentences(facts: Fact[], raw: RawSentence[]): Validation
         continue;
       }
       const citedText = cited.map((id) => byId.get(id)!.text).join(" \n ");
-      const supported = new Set(numbersIn(citedText));
-      const unsupported = numbersIn(text).filter((n) => !supported.has(n));
+      const supported = new Set(quantitiesIn(citedText));
+      const unsupported = quantitiesIn(text).filter((n) => !supported.has(n));
       if (unsupported.length > 0) {
         drop(`číslo ${unsupported.join(", ")} není v citovaných faktech`);
         continue;
@@ -137,13 +169,18 @@ export function validateSentences(facts: Fact[], raw: RawSentence[]): Validation
         drop("nesdílí žádné významné slovo s citovanými fakty");
         continue;
       }
+      const tech = unstatedTech(text);
+      if (tech.length > 0) {
+        drop(`zmiňuje ${tech.map((t) => `„${t}“`).join(", ")}, což není v žádném faktu`);
+        continue;
+      }
     } else {
       const digits = numbersIn(text);
       if (digits.length > 0) {
         drop(`obsahuje číslo ${digits.join(", ")}`);
         continue;
       }
-      const tech = techTermsIn(text).filter((term) => !factsFold.includes(term));
+      const tech = unstatedTech(text);
       if (tech.length > 0) {
         drop(`zmiňuje ${tech.map((t) => `„${t}“`).join(", ")}, což není v žádném faktu`);
         continue;

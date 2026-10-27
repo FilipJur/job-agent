@@ -9,10 +9,12 @@ const FACTS: Fact[] = [
   { id: "F3", text: "Za sebou má 3,5 roku praxe s PHP." },
   { id: "F4", text: "AI-assisted vývoj: coding agenti, MCP, routování modelů." },
   { id: "F5", text: "Astro." },
+  { id: "F6", text: "Preferuje spolupráci na IČO, dobrému HPP se nebrání." },
+  { id: "F7", text: "React, TypeScript, Vite, Tailwind." },
 ];
 
-const verdicts = (sentences: RawSentence[]): { kept: string[]; why: string[] } => {
-  const { sentences: kept, dropped } = validateSentences(FACTS, sentences);
+const verdicts = (sentences: RawSentence[], facts: Fact[] = FACTS): { kept: string[]; why: string[] } => {
+  const { sentences: kept, dropped } = validateSentences(facts, sentences);
   return { kept: kept.map((s) => s.text), why: dropped.map((d) => d.why) };
 };
 
@@ -40,6 +42,10 @@ describe("claim validation", () => {
     expect(verdicts([{ text: "Mám 3,5 roku praxe s PHP.", kind: "claim", facts: ["F3"] }]).kept).toEqual([
       "Mám 3,5 roku praxe s PHP.",
     ]);
+    // Spelled out is still a number: no fact states five years.
+    expect(verdicts([{ text: "Pracuji pět let s WordPressem.", kind: "claim", facts: ["F2"] }]).why).toEqual([
+      "číslo 5 není v citovaných faktech",
+    ]);
   });
 
   test("a claim sharing no word with its cited facts is dropped, a supported one kept", () => {
@@ -51,6 +57,13 @@ describe("claim validation", () => {
     expect(verdicts([{ text: "Pracuji s Astrem.", kind: "claim", facts: ["F5"] }]).kept).toEqual([
       "Pracuji s Astrem.",
     ]);
+    // A supported word does not launder an unstated technology; a stated but uncited one is fine.
+    expect(verdicts([{ text: "Pracuji s React a Python.", kind: "claim", facts: ["F7"] }]).why).toEqual([
+      "zmiňuje „python“, což není v žádném faktu",
+    ]);
+    expect(verdicts([{ text: "Pracuji s React a Astro.", kind: "claim", facts: ["F7"] }]).kept).toEqual([
+      "Pracuji s React a Astro.",
+    ]);
   });
 
   test("greeting and question carrying a digit or an unstated technology are dropped", () => {
@@ -60,6 +73,15 @@ describe("claim validation", () => {
     expect(verdicts([{ text: "Umíte Vue?", kind: "question", facts: [] }]).why).toEqual([
       "zmiňuje „vue“, což není v žádném faktu",
     ]);
+    // Terms match whole fact words: `ci` is not in `spolupráci`, `ai` is not in `Tailwind`.
+    expect(verdicts([{ text: "Zvládnete CI/CD?", kind: "question", facts: [] }]).why).toEqual([
+      "zmiňuje „ci“, což není v žádném faktu",
+    ]);
+    expect(
+      verdicts([{ text: "Používám AI při vývoji.", kind: "question", facts: [] }], [
+        { id: "F1", text: "React, TypeScript, Vite, Tailwind." },
+      ]).why,
+    ).toEqual(["zmiňuje „ai“, což není v žádném faktu"]);
     expect(verdicts([{ text: "Jakou sazbu nabízíte?", kind: "question", facts: [] }]).kept).toEqual([
       "Jakou sazbu nabízíte?",
     ]);
