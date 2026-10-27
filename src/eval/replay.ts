@@ -12,6 +12,8 @@ export interface ReplayOptions {
   apiKey: string;
   sessionId: string;
   postJson?: PostJson;
+  /** Replay only these labeled offers; absent = all (current behaviour). */
+  offerIds?: number[];
 }
 
 export interface ReplayItem {
@@ -36,7 +38,8 @@ const MAX_CONCURRENT_SCORES = 4;
 
 /** Re-scores the labeled offers with `profile` + `model`, at most 4 calls at a time; never writes to the database. */
 export async function replayLabeled(db: Database, opts: ReplayOptions): Promise<ReplayResult> {
-  const offers = labeledOffersToScore(db);
+  const only = opts.offerIds === undefined ? null : new Set(opts.offerIds);
+  const offers = labeledOffersToScore(db).filter((o) => only === null || only.has(o.id));
   const client = {
     endpoint: opts.endpoint,
     model: opts.model,

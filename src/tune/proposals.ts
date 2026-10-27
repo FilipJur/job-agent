@@ -28,6 +28,8 @@ export interface Proposal {
   baseProfile: string;
   profile: string;
   metrics: { current: EvalSummary; proposed: EvalSummary };
+  /** How the delta was measured; absent on files written before the hold-out split (= in-sample). */
+  evaluation?: { kind: "holdout" | "in-sample"; n: number };
 }
 
 /** What is on disk; `stale` depends on the live profile and is never stored. */

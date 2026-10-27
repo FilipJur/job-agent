@@ -78,4 +78,6 @@ export interface Proposal {
   baseProfile: string;
   profile: string;
   metrics: { current: EvalSummary; proposed: EvalSummary };
+  /** How the delta was measured; absent on older files (= in-sample). */
+  evaluation?: { kind: "holdout" | "in-sample"; n: number };
 }
