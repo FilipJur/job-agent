@@ -1,6 +1,8 @@
 {
   "currentRate": 0,
   "eurCzk": 25.0,
+  "usdCzk": 21.8,
+  "gbpCzk": 29.1,
   "hoursPerMonth": 160,
   "hoursPerYear": 1920,
   "skills": [
