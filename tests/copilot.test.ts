@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { generateDraft } from "../src/copilot/draft";
 import { parseFacts } from "../src/copilot/facts";
 import { composeDraftText, validateSentences, type RawSentence } from "../src/copilot/validate";
+import type { PostJson } from "../src/scoring/client";
 import type { Fact } from "../src/types";
 
 const FACTS: Fact[] = [
@@ -98,6 +100,27 @@ describe("composeDraftText", () => {
     ]);
     expect(composeDraftText(sentences)).toBe(
       "Dobrý den,\n\nDělám WordPress. Jakou sazbu nabízíte?\n\nDěkuji, Filip",
+    );
+  });
+});
+
+describe("generateDraft", () => {
+  test("a model slower than the draft limit fails with a clear timeout error", async () => {
+    // Never answers: the draft's own deadline must end the wait.
+    const slow: PostJson = () => Promise.withResolvers<{ status: number; body: string }>().promise;
+    const draft = generateDraft({
+      offer: { id: 1, title: "Dev", company: null, locationText: null, city: null, workplace: "remote", description: "", labels: [] },
+      facts: FACTS,
+      model: "m",
+      endpoint: "http://localhost/none",
+      maxDescriptionChars: 100,
+      apiKey: "k",
+      sessionId: "s",
+      postJson: slow,
+      timeoutMs: 20,
+    });
+    await expect(draft).rejects.toThrow(
+      "draft timed out: the model did not answer within 0.02 s; nothing was saved, try again",
     );
   });
 });

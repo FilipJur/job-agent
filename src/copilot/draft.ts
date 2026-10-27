@@ -1,6 +1,25 @@
-import { defaultPostJson, type PostJson } from "../scoring/client";
+import type { PostJson } from "../scoring/client";
 import type { Draft, Fact, OfferToScore } from "../types";
 import { composeDraftText, validateSentences, type RawSentence } from "./validate";
+
+/** A draft writes several fact-checked sentences; replies took up to 81 s in smoke, past scoring's 60 s. */
+export const DRAFT_TIMEOUT_MS = 180_000;
+
+/** Same request as scoring's `defaultPostJson`, with the draft's own time limit. */
+const draftPostJson: PostJson = async (url, body, apiKey, sessionId) => {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "User-Agent": "job-agent-score/1.0",
+      "x-opencode-session": sessionId,
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(DRAFT_TIMEOUT_MS),
+  });
+  return { status: res.status, body: await res.text() };
+};
 
 const DRAFT_SCHEMA = {
   type: "object",
@@ -93,12 +112,15 @@ export interface DraftOptions {
   apiKey: string;
   sessionId: string;
   postJson?: PostJson;
+  /** Defaults to `DRAFT_TIMEOUT_MS`; tests shorten it. */
+  timeoutMs?: number;
   now?: Date;
 }
 
 /** Asks the model for a reply and keeps only sentences the facts support. Nothing is sent. */
 export async function generateDraft(opts: DraftOptions): Promise<Draft> {
-  const postJson = opts.postJson ?? defaultPostJson;
+  const postJson = opts.postJson ?? draftPostJson;
+  const timeoutMs = opts.timeoutMs ?? DRAFT_TIMEOUT_MS;
   const request = {
     model: opts.model,
     input: [
@@ -109,7 +131,19 @@ export async function generateDraft(opts: DraftOptions): Promise<Draft> {
     ],
     text: { format: { type: "json_schema", name: "reply_draft", schema: DRAFT_SCHEMA } },
   };
-  const res = await postJson(opts.endpoint, request, opts.apiKey, opts.sessionId);
+  // The deadline holds for any `postJson`; the fetch's own abort maps to the same message.
+  const timedOut = new Error(`draft timed out: the model did not answer within ${timeoutMs / 1000} s; nothing was saved, try again`);
+  const deadline = Promise.withResolvers<never>();
+  const timer = setTimeout(() => deadline.reject(timedOut), timeoutMs);
+  let res: { status: number; body: string };
+  try {
+    res = await Promise.race([postJson(opts.endpoint, request, opts.apiKey, opts.sessionId), deadline.promise]);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") throw timedOut;
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
   if (res.status !== 200) throw new Error(`API error ${res.status}: ${res.body.slice(0, 200)}`);
   const reply = parseDraftReply(extractReplyText(res.body));
   const { sentences, dropped } = validateSentences(opts.facts, reply.sentences);
