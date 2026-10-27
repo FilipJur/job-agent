@@ -1,523 +1,121 @@
-:root {
-  color-scheme: light dark;
-  --bg: #f5f5f2;
-  --surface: #ffffff;
-  --surface-2: #eeece6;
-  --text: #1b1b19;
-  --muted: #64645d;
-  --line: #dcdcd3;
-  --accent: #2456b3;
-  --accent-text: #ffffff;
-  --good: #167a46;
-  --mid: #96620a;
-  --low: #a3342a;
-  --radius: 10px;
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/ibm-plex-mono/400-italic.css";
+@import "@fontsource/ibm-plex-mono/500-italic.css";
+@import "tailwindcss";
+
+/*
+ * DESIGN RULES: cold, sterile terminal. Test for every element: "would a real terminal do this?"
+ * - One monospace family everywhere; the page is a character grid (ch / lh), not a pixel layout.
+ *   Hierarchy comes from four levers inside that family, each with ONE job:
+ *     UPPERCASE + wide tracking (0.12-0.3em, 12px) = chrome: legends, field labels, tabs, tags, buttons, mode tag.
+ *     Weight (400 / 500 / 600)                         = data importance: title 600, company 500, rest 400.
+ *     Size                                             = only for the title and the score numeral.
+ *     Italic                                           = commentary only: the model's reason, quoted evidence,
+ *                                                        hints and empty states. Never titles, numbers, controls,
+ *                                                        user input or labels. If it is data, it is upright.
+ * - Structure from lines and characters: 1px rules, fieldset legends cut into frames, [x] / (•) controls,
+ *   block-character score bars, inverse video for the active thing. Corners are square: radius 0.
+ * - No gradients, shadows, glow, scanlines, grain, icons, emoji, or decorative loops. No green phosphor nostalgia.
+ * - Tracked caps are for short labels only (<= ~3 words); prose is never uppercase or tracked.
+ * - Cold palette on blue-black: grey-blue text, one ice-cyan signal for selection and action.
+ * - Motion is instant or near-instant (<= 120 ms), opacity only. Terminals do not slide.
+ */
+@theme {
+  --color-bg: oklch(0.14 0.012 250);
+  --color-surface: oklch(0.175 0.014 250);
+  --color-raised: oklch(0.215 0.016 250);
+  --color-line: oklch(0.33 0.025 250);
+  --color-line-strong: oklch(from var(--color-line) calc(l + 0.14) c h);
+  --color-fg: oklch(0.92 0.012 235);
+  --color-muted: oklch(0.7 0.02 245);
+  --color-faint: oklch(0.54 0.025 250);
+  --color-signal: oklch(0.86 0.1 215);
+  --color-ok: oklch(0.82 0.11 170);
+  --color-bad: oklch(0.72 0.15 20);
+
+  --font-sans: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161614;
-    --surface: #1f1f1c;
-    --surface-2: #2a2a26;
-    --text: #ecece7;
-    --muted: #a3a39a;
-    --line: #383832;
-    --accent: #8db2ff;
-    --accent-text: #10131a;
-    --good: #63d19a;
-    --mid: #e5b955;
-    --low: #ff9182;
+/* Score 0-10 (--s on the element) on one ramp: faint blue-grey -> ice. */
+@utility score-ink {
+  color: color-mix(in oklch, var(--color-faint), var(--color-signal) calc(var(--s) * 10%));
+}
+
+/* Multi-select, TUI style: "[ ] label" / "[x] label", driven by aria-pressed. */
+@utility cb {
+  &::before {
+    content: "[ ] ";
+    white-space: pre;
+    color: var(--color-faint);
+  }
+  &[aria-pressed="true"]::before {
+    content: "[x] ";
+    color: var(--color-signal);
   }
 }
 
-* {
-  box-sizing: border-box;
-}
-
-html {
-  -webkit-text-size-adjust: 100%;
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-
-a {
-  color: var(--accent);
-}
-
-button,
-select,
-input,
-textarea {
-  font: inherit;
-  color: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.app-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
-}
-
-.header-inner {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 10px 12px 0;
-}
-
-h1 {
-  margin: 0 0 8px;
-  font-size: 1.05rem;
-  letter-spacing: 0.01em;
-}
-
-.tabs {
-  display: flex;
-  gap: 2px;
-  max-width: 560px;
-}
-
-.tab {
-  flex: 1;
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
-  background: transparent;
-  color: var(--muted);
-}
-
-.tab-active {
-  background: var(--surface);
-  border-color: var(--line);
-  color: var(--text);
-  font-weight: 600;
-}
-
-.app-main {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 12px 12px 40px;
-}
-
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.filter,
-.filter-reset {
-  min-height: 40px;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-}
-
-.filter-active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-text);
-}
-
-.filter-reset {
-  border-style: dashed;
-  background: transparent;
-  color: var(--muted);
-}
-
-.status {
-  margin: 0 0 10px;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.error {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--low);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--low) 14%, var(--surface));
-}
-
-.error-close {
-  margin-left: auto;
-  padding: 0 4px;
-  border: none;
-  background: transparent;
-  font-size: 1.3rem;
-  line-height: 1;
-}
-
-.empty {
-  padding: 24px 0;
-  color: var(--muted);
-  text-align: center;
-}
-
-.offers {
-  display: grid;
-  gap: 10px;
-}
-
-.offer {
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-.offer-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.offer-title {
-  margin: 0;
-  font-size: 1rem;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.offer-title a {
-  color: var(--text);
-  text-decoration: none;
-}
-
-.offer-title a:hover {
-  color: var(--accent);
-  text-decoration: underline;
-}
-
-.score {
-  flex: none;
-  padding: 3px 8px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.score-good {
-  color: var(--good);
-}
-
-.score-mid {
-  color: var(--mid);
-}
-
-.score-low {
-  color: var(--low);
-}
-
-.score-none {
-  color: var(--muted);
-  font-weight: 400;
-}
-
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 0.875rem;
-}
-
-.meta > span:not(:last-child)::after {
-  content: "·";
-  margin: 0 6px;
-}
-
-.meta .company {
-  color: var(--text);
-  font-weight: 500;
-}
-
-.meta .salary {
-  color: var(--text);
-  font-weight: 500;
-}
-
-.meta-sub {
-  font-size: 0.8rem;
-}
-
-.partial {
-  color: var(--mid);
-}
-
-.score-detail {
-  margin-top: 8px;
-  font-size: 0.9rem;
-}
-
-.reason {
-  margin: 0;
-}
-
-.gaps {
-  margin: 2px 0 0;
-  color: var(--muted);
-}
-
-.gaps-label {
-  font-weight: 600;
-}
-
-.labels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.chip {
-  padding: 2px 8px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.feedback-reason {
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.action {
-  min-width: 44px;
-  min-height: 40px;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.action:hover:not(:disabled) {
-  border-color: var(--accent);
-}
-
-.action-active {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-text);
-  font-weight: 600;
-}
-
-.action:disabled {
-  cursor: progress;
-  opacity: 0.55;
-}
-
-.agencies {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  border-collapse: collapse;
-  background: var(--surface);
-  font-size: 0.9rem;
-}
-
-.agencies th,
-.agencies td {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
-  vertical-align: top;
-}
-
-.agencies th {
-  color: var(--muted);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.agencies tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.agency-name {
-  font-weight: 600;
-}
-
-.fit {
-  display: inline-block;
-  min-width: 24px;
-  padding: 1px 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface-2);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
-.contact {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 4px;
-}
-
-.contact a {
-  overflow-wrap: break-word;
-  font-size: 0.8rem;
-  font-weight: 400;
-}
-
-.status-select,
-.date-input,
-.notes {
-  width: 100%;
-  min-height: 38px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  font-size: 0.85rem;
-}
-
-.notes {
-  min-width: 150px;
-  resize: vertical;
-}
-
-.date-input {
-  min-width: 122px;
-  padding: 6px 4px;
-}
-
-.status-select {
-  min-width: 116px;
-  padding: 6px 4px;
-}
-
-.profile {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.profile-text {
-  width: 100%;
-  min-height: 300px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  font-size: 0.85rem;
-  resize: vertical;
-}
-
-.profile-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.hint {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-@media (min-width: 900px) {
-  .offers {
-    grid-template-columns: 1fr 1fr;
+/* Single-select: "( ) label" / "(•) label". */
+@utility rb {
+  &::before {
+    content: "( ) ";
+    white-space: pre;
+    color: var(--color-faint);
+  }
+  &[aria-pressed="true"]::before {
+    content: "(•) ";
+    color: var(--color-signal);
   }
 }
 
-@media (max-width: 760px) {
-  .agencies,
-  .agencies tbody,
-  .agencies tr,
-  .agencies td {
-    display: block;
-    width: 100%;
+@layer base {
+  html {
+    color-scheme: dark;
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
   }
 
-  .agencies {
-    border: none;
-    background: transparent;
+  body {
+    @apply bg-bg font-sans text-fg antialiased;
+    min-height: 100dvh;
+    line-height: 1.5;
+    font-variant-ligatures: none;
   }
 
-  .agencies thead {
-    display: none;
+  a {
+    @apply text-fg underline decoration-line-strong underline-offset-4 transition-colors hover:text-signal hover:decoration-signal;
   }
 
-  .agencies tr {
-    margin-bottom: 10px;
-    padding: 10px 12px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--surface);
+  button {
+    @apply cursor-pointer;
   }
 
-  .agencies td {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 4px 0;
-    border: none;
+  button:disabled {
+    @apply cursor-not-allowed;
   }
 
-  .agencies td::before {
-    flex: 0 0 96px;
-    padding-top: 2px;
-    color: var(--muted);
-    font-size: 0.8rem;
-    content: attr(data-label);
+  fieldset {
+    min-inline-size: 0;
   }
 
-  .agencies td > select,
-  .agencies td > input,
-  .agencies td > textarea,
-  .agencies td > .contact {
-    flex: 1 1 auto;
-    min-width: 0;
+  legend {
+    @apply px-1.5;
   }
 
-  .agencies td.agency-name {
-    margin-bottom: 4px;
-    font-size: 1.05rem;
+  :focus-visible {
+    outline: 1px solid var(--color-signal);
+    outline-offset: 2px;
   }
 
-  .agencies td.agency-name::before {
-    content: none;
+  ::selection {
+    background: var(--color-signal);
+    color: var(--color-bg);
   }
 }

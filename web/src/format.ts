@@ -68,3 +68,11 @@ export function agencyCount(count: number): string {
   if (count >= 2 && count <= 4) return `${count} agentury`;
   return `${count} agentur`;
 }
+
+export function offerRatio(shown: number, total: number): string {
+  return `${shown} z ${total} nabídek`;
+}
+
+export function crawlStatus(crawledAt: string | null): string {
+  return crawledAt === null ? "nekontrolováno" : `zkontrolováno ${formatDate(crawledAt)}`;
+}

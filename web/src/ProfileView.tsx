@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchProfile, saveProfile } from "./api";
 import { offerCount } from "./format";
+import { primaryButton } from "./ui";
 
 export function ProfileView({ onError }: { onError: (message: string) => void }) {
   const [text, setText] = useState<string | null>(null);
@@ -21,7 +22,7 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
   }, [onError]);
 
   if (text === null) {
-    return <p className="empty">Načítám profil…</p>;
+    return <p className="py-10 text-muted">načítám profil…</p>;
   }
 
   const save = async () => {
@@ -38,21 +39,24 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
   };
 
   return (
-    <section className="profile">
-      <textarea
-        className="profile-text"
-        aria-label="Profil"
-        rows={20}
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-      />
-      <div className="profile-actions">
-        <button type="button" className="filter" disabled={saving || text.trim() === ""} onClick={() => void save()}>
-          Uložit
+    <section className="grid gap-3">
+      <fieldset className="border border-line px-3 pb-3 sm:px-4">
+        <legend className="text-[0.75rem] font-medium tracking-[0.2em] text-faint uppercase">profile.md</legend>
+        <textarea
+          className="min-h-96 w-full resize-y bg-transparent text-sm leading-relaxed text-fg outline-none"
+          aria-label="Profil"
+          rows={20}
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+        />
+      </fieldset>
+      <div>
+        <button type="button" className={primaryButton} disabled={saving || text.trim() === ""} onClick={() => void save()}>
+          uložit
         </button>
       </div>
-      <p className="status">Čeká na přehodnocení: {offerCount(pending)}</p>
-      <p className="hint">Přehodnotí se při příštím <code>daily</code> nebo <code>bun run score</code>.</p>
+      <p className="text-sm text-muted"><span className="text-[0.75rem] font-medium tracking-[0.16em] text-faint uppercase">čeká na přehodnocení</span> {offerCount(pending)}</p>
+      <p className="text-sm text-muted italic [&_code]:text-fg [&_code]:not-italic">přehodnotí se při příštím <code>daily</code> nebo <code>bun run score</code>.</p>
     </section>
   );
 }
