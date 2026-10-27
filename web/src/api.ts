@@ -1,5 +1,6 @@
 import type { AgencyPatch, AgencyRow, OfferRow, Tab, Verdict } from "./types";
 
+/** Contract for GET /api/aspirations (backend worker owns src/types.ts); matches the prompt shape. */
 export interface AspirationRow {
   id: number;
   title: string;
