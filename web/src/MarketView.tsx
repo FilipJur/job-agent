@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchMarket } from "./api";
+import { fetchMarketCached } from "./api";
 import { formatDate } from "./format";
+import { OfflineLine } from "./OfflineLine";
 import { fieldLabel, linkButton, meta, tag } from "./ui";
 import type { MarketReport, RateBand, RateForm, RatePlace, SkillStat } from "./types";
 
@@ -258,15 +259,17 @@ function SamplesSection({ samples }: { samples: MarketReport["samples"] }) {
 
 export function MarketView({ onError }: { onError: (message: string) => void }) {
   const [report, setReport] = useState<MarketReport | null>(null);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchMarket(controller.signal)
-      .then((data) => {
+    fetchMarketCached(controller.signal)
+      .then(({ data, cachedAt: stamp }) => {
         if (!controller.signal.aborted) {
           setReport(data);
+          setCachedAt(stamp);
           setFailed(null);
         }
       })
@@ -301,6 +304,7 @@ export function MarketView({ onError }: { onError: (message: string) => void }) 
 
   return (
     <section className="grid gap-4">
+      <OfflineLine cachedAt={cachedAt} />
       <p className="text-sm text-muted tabular-nums" aria-live="polite">
         {report.offers} nabídek · {report.withRate} se sazbou · {formatDate(report.generatedAt)}
       </p>

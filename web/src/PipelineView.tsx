@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { fetchApplications, removeApplication, saveApplication } from "./api";
+import { fetchApplicationsCached, removeApplication, saveApplication } from "./api";
 import { formatDate, toDateInput } from "./format";
+import { OfflineLine } from "./OfflineLine";
 import { control, fieldLabel, linkButton, note, selectControl, selectWrap, tag } from "./ui";
 import type { Application, AppStage } from "./types";
 import { STAGE_LABELS, STAGE_ORDER } from "./types";
@@ -169,14 +170,17 @@ function PipelineCard({ application, pending, onStage, onNotes, onNextAction, on
 
 export function PipelineView({ onError }: { onError: (message: string) => void }) {
   const [rows, setRows] = useState<Application[] | null>(null);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingId, setPendingId] = useState<number | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchApplications(controller.signal)
-      .then((data) => {
-        if (!controller.signal.aborted) setRows(data ?? []);
+    fetchApplicationsCached(controller.signal)
+      .then(({ data, cachedAt: stamp }) => {
+        if (controller.signal.aborted) return;
+        setRows(data ?? []);
+        setCachedAt(stamp);
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
@@ -243,10 +247,13 @@ export function PipelineView({ onError }: { onError: (message: string) => void }
   }
   if (rows.length === 0) {
     return (
-      <p className="grid max-w-[60ch] gap-2 py-10 text-muted">
-        $ pipeline/ <br />
-        <span className={note}>(prázdné) Nastav fázi na kartě nabídky — objeví se tady.</span>
-      </p>
+      <>
+        <OfflineLine cachedAt={cachedAt} />
+        <p className="grid max-w-[60ch] gap-2 py-10 text-muted">
+          $ pipeline/ <br />
+          <span className={note}>(prázdné) Nastav fázi na kartě nabídky — objeví se tady.</span>
+        </p>
+      </>
     );
   }
 
@@ -258,7 +265,9 @@ export function PipelineView({ onError }: { onError: (message: string) => void }
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3" aria-label="Pipeline přihlášek">
+    <>
+    <OfflineLine cachedAt={cachedAt} />
+    <div className="mt-2 grid gap-6 lg:grid-cols-2 xl:grid-cols-3" aria-label="Pipeline přihlášek">
       {STAGE_ORDER.filter((stage) => (byStage.get(stage)?.length ?? 0) > 0).map((stage) => (
         <section key={stage} className="grid content-start gap-3" aria-label={`Fáze ${STAGE_LABELS[stage]}`}>
           <h2 className={fieldLabel}>
@@ -278,5 +287,6 @@ export function PipelineView({ onError }: { onError: (message: string) => void }
         </section>
       ))}
     </div>
+    </>
   );
 }

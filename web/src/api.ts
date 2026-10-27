@@ -22,25 +22,32 @@ export class ApiError extends Error {
   }
 }
 
-/** Extracts the `{ error }` message the API returns for 4xx/5xx responses. */
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export interface Cached<T> {
+  data: T;
+  /** ISO time the service worker cached the served response, or null when fresh. */
+  cachedAt: string | null;
+}
+
+/** Same as `request`, but also reports the `x-sw-cache` stamp of a cached response (offline line). */
+export async function requestCached<T>(path: string, init?: RequestInit): Promise<Cached<T>> {
   const response = await fetch(path, init);
   if (!response.ok) throw await apiError(response);
   const text = await response.text();
-  return (text.length > 0 ? JSON.parse(text) : null) as T;
+  return { data: (text.length > 0 ? JSON.parse(text) : null) as T, cachedAt: response.headers.get("x-sw-cache") };
 }
 
-export async function fetchOffers(
-  tab: Tab,
-  filters: OfferFilters,
-  signal: AbortSignal,
-): Promise<OfferRow[]> {
+/** Extracts the `{ error }` message the API returns for 4xx/5xx responses. */
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await requestCached<T>(path, init)).data;
+}
+
+export async function fetchOffersCached(tab: Tab, filters: OfferFilters, signal: AbortSignal): Promise<Cached<OfferRow[]>> {
   const params = new URLSearchParams({ tab });
   if (filters.onlyNew) params.set("new", "1");
   if (filters.remote) params.set("remote", "1");
   if (filters.olomouc) params.set("olomouc", "1");
   if (filters.hidden) params.set("hidden", "1");
-  return request<OfferRow[]>(`/api/offers?${params.toString()}`, { signal });
+  return requestCached<OfferRow[]>(`/api/offers?${params.toString()}`, { signal });
 }
 
 /** Clicking the active verdict clears it (DELETE); otherwise appends the new verdict. Returns the verdict to show as active, if any. */
@@ -69,23 +76,23 @@ export async function clearVerdict(offerId: number): Promise<void> {
   await request<unknown>(`/api/offers/${offerId}/feedback`, { method: "DELETE" });
 }
 
-export async function fetchTriage(limit: number, signal: AbortSignal): Promise<TriageQueue> {
-  return request<TriageQueue>(`/api/triage?limit=${limit}`, { signal });
+export async function fetchTriageCached(limit: number, signal: AbortSignal): Promise<Cached<TriageQueue>> {
+  return requestCached<TriageQueue>(`/api/triage?limit=${limit}`, { signal });
 }
 
-export async function fetchAgencies(signal: AbortSignal): Promise<AgencyRow[]> {
-  return request<AgencyRow[]>("/api/agencies", { signal });
+export async function fetchAgenciesCached(signal: AbortSignal): Promise<Cached<AgencyRow[]>> {
+  return requestCached<AgencyRow[]>("/api/agencies", { signal });
 }
-
 /**
  * Market report for the Trh tab. Returns `null` when the backend worker is
  * not merged yet (404): the view renders the "not available" message then.
  */
-export async function fetchMarket(signal: AbortSignal): Promise<MarketReport | null> {
+export async function fetchMarketCached(signal: AbortSignal): Promise<Cached<MarketReport | null>> {
   const response = await fetch("/api/market", { signal });
-  if (response.status === 404) return null;
+  if (response.status === 404) return { data: null, cachedAt: null };
   if (!response.ok) throw await apiError(response);
-  return (await response.json()) as MarketReport;
+  const text = await response.text();
+  return { data: (text.length > 0 ? JSON.parse(text) : null) as MarketReport, cachedAt: response.headers.get("x-sw-cache") };
 }
 
 export async function patchAgency(agencyId: number, patch: AgencyPatch): Promise<AgencyRow> {
@@ -128,12 +135,12 @@ export async function saveFacts(text: string): Promise<FactsStatus> {
   });
 }
 
-export async function fetchApplications(signal: AbortSignal): Promise<Application[] | null> {
+export async function fetchApplicationsCached(signal: AbortSignal): Promise<Cached<Application[] | null>> {
   const response = await fetch("/api/applications", { signal });
-  if (response.status === 404) return null;
+  if (response.status === 404) return { data: null, cachedAt: null };
   if (!response.ok) throw await apiError(response);
   const parsed: unknown = await response.json();
-  return Array.isArray(parsed) ? (parsed as Application[]) : [];
+  return { data: Array.isArray(parsed) ? (parsed as Application[]) : [], cachedAt: response.headers.get("x-sw-cache") };
 }
 
 export async function saveApplication(

@@ -49,6 +49,14 @@
   color: color-mix(in oklch, var(--color-faint), var(--color-signal) calc(var(--s) * 10%));
 }
 
+/* Horizontally scrolling strips (tab bar) without a visible scrollbar. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Multi-select, TUI style: "[ ] label" / "[x] label", driven by aria-pressed. */
 @utility cb {
   &::before {
