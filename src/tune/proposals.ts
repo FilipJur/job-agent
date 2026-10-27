@@ -113,8 +113,25 @@ export function rejectProposal(id: string): ProposalAction {
 
 const TUNE_INTERVAL_MS = 7 * 24 * 3600 * 1000;
 
-/** At most one proposal per 7 days, measured from the newest proposal (any status). */
+const ATTEMPT_FILE = "last-attempt.json";
+
+/** Records that a tune run started, so `unchanged`/failed runs (no proposal file) still count toward the weekly cadence. */
+export function markTuneAttempt(nowMs: number): void {
+  mkdirSync(proposalsDir(), { recursive: true });
+  writeFileSync(join(proposalsDir(), ATTEMPT_FILE), `${JSON.stringify({ at: new Date(nowMs).toISOString() })}\n`);
+}
+
+/** At most one tune attempt per 7 days, measured from the newer of the newest proposal and the last attempt. */
 export function isTuneDue(nowMs: number): boolean {
   const newest = listProposals()[0];
-  return newest === undefined || nowMs - Date.parse(newest.createdAt) >= TUNE_INTERVAL_MS;
+  let last = newest === undefined ? null : Date.parse(newest.createdAt);
+  try {
+    const raw = JSON.parse(readFileSync(join(proposalsDir(), ATTEMPT_FILE), "utf8")) as { at?: unknown };
+    if (typeof raw.at === "string" && !Number.isNaN(Date.parse(raw.at))) {
+      last = Math.max(last ?? 0, Date.parse(raw.at));
+    }
+  } catch {
+    // No marker (or a corrupt one): fall back to the newest proposal file only.
+  }
+  return last === null || nowMs - last >= TUNE_INTERVAL_MS;
 }
