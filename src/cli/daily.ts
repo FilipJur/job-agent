@@ -10,6 +10,9 @@ import { createCachedFetch, type HttpMode } from "../http-cache";
 import { loadScoringConfig } from "../scoring/config";
 import { runScoring } from "../scoring/run";
 import { COLLECTORS, collectSources, dueSources, printRuns } from "./collect";
+import { printResult } from "./tune";
+import { generateProposal } from "../tune/generate";
+import { isTuneDue } from "../tune/proposals";
 
 const { config: scoringConfig, profile } = loadScoringConfig();
 
@@ -98,6 +101,23 @@ async function main(argv: string[]): Promise<void> {
         `wall=${(summary.wallMs / 1000).toFixed(1)}s tokens=${summary.promptTokens}+${summary.completionTokens} ` +
         `cost=$${cost.toFixed(4)}${summary.fallbackUsed ? " (json_object fallback used)" : ""}`,
     );
+    // Weekly profile proposal; skipped on --limit smoke runs. A failure is printed, never fails the run.
+    try {
+      if (limit === null && isTuneDue(Date.now())) {
+        printResult(
+          await generateProposal(db, {
+            profile,
+            model: scoringConfig.model,
+            endpoint: scoringConfig.endpoint,
+            maxDescriptionChars: scoringConfig.maxDescriptionChars,
+            apiKey,
+            sessionId: process.env.OPENCODE_GO_SESSION ?? crypto.randomUUID(),
+          }),
+        );
+      }
+    } catch (e) {
+      console.error(`tune failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
     if (collectErrors > 0 || exitCode !== 0) process.exitCode = 1;
   } finally {
     db.close();

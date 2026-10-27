@@ -5,6 +5,7 @@ import { readProfile, writeProfile } from "../profile";
 import { countOffersToScore, listAgencies, listAspirations, listOffers, saveFeedback, triageQueue, updateAgency } from "../repo";
 import { profileHashOf } from "../scoring/run";
 import { scoreModel } from "../scoring/config";
+import { applyProposal, listProposals, rejectProposal } from "../tune/proposals";
 import type { AgencyPatch, AgencyStatus } from "../types";
 
 /** Paths and values are fixed by the API contract in docs; keep them in one place. */
@@ -205,6 +206,16 @@ async function route(req: Request, db: Database): Promise<Response> {
     if (method === "GET" || method === "HEAD") return profileStatus(db);
     if (method === "PUT") return putProfile(req, db);
     return fail(405, "use GET or PUT");
+  }
+  if (path === "/api/proposals") {
+    return method === "GET" || method === "HEAD" ? json(listProposals()) : fail(405, "use GET");
+  }
+  const proposal = /^\/api\/proposals\/([^/]+)\/(apply|reject)$/.exec(path);
+  if (proposal) {
+    if (method !== "POST") return fail(405, "use POST");
+    const id = proposal[1] ?? "";
+    const result = proposal[2] === "apply" ? applyProposal(id) : rejectProposal(id);
+    return result.ok ? json({ ok: true }) : fail(result.status, result.error);
   }
   const agency = /^\/api\/agencies\/([^/]+)$/.exec(path);
   if (agency) {
