@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
-import { offersToScore, saveScore } from "../repo";
-import { defaultPostJson, scoreOneOffer, type PostJson } from "./client";
+import { countOpinionsToScore, opinionsToScore, offersToScore, saveOpinion, saveScore } from "../repo";
+import type { OfferToScore } from "../types";
+import { defaultPostJson, scoreOneOffer, type PostJson, type ScoreResult } from "./client";
 
 export interface RunScoringOptions {
   profile: string;
@@ -24,12 +25,49 @@ export interface ScoringSummary {
   completionTokens: number;
   fallbackUsed: boolean;
 }
-
 const MAX_CONCURRENT_SCORES = 4;
 
 /** Score identity: the profile text plus the model that produced it. Same profile + different model = re-score. */
 export const profileHashOf = (profile: string, model?: string): string =>
   createHash("sha256").update(profile + "\nmodel:" + (model ?? "")).digest("hex");
+
+interface LoopState {
+  scored: number;
+  failed: number;
+  promptTokens: number;
+  completionTokens: number;
+  fallbackUsed: boolean;
+}
+
+/**
+ * LLM fan-out shared by the primary run and the second opinion: at most 4 calls
+ * at a time; one failure is counted and logged, never thrown.
+ */
+async function runLoop(
+  offers: OfferToScore[],
+  scoreAndSave: (offer: OfferToScore) => Promise<ScoreResult>,
+): Promise<LoopState> {
+  const state: LoopState = { scored: 0, failed: 0, promptTokens: 0, completionTokens: 0, fallbackUsed: false };
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < offers.length) {
+      const offer = offers[next]!;
+      next += 1;
+      try {
+        const r = await scoreAndSave(offer);
+        state.scored += 1;
+        state.promptTokens += r.promptTokens;
+        state.completionTokens += r.completionTokens;
+        if (r.usedFallback) state.fallbackUsed = true;
+      } catch (e) {
+        state.failed += 1;
+        console.error(`score failed for offer ${offer.id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_SCORES, offers.length) }, () => worker()));
+  return state;
+}
 
 /**
  * Scores offers missing a score for this profile hash, at most 4 LLM calls at a time.
@@ -48,62 +86,83 @@ export async function runScoring(db: Database, opts: RunScoringOptions): Promise
   const skipped = skippedRow.n;
   const now = opts.now ?? (() => new Date().toISOString());
   const postJson = opts.postJson ?? defaultPostJson;
-  let scored = 0;
-  let failed = 0;
-  let promptTokens = 0;
-  let completionTokens = 0;
-  let fallbackUsed = false;
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (next < offers.length) {
-      const offer = offers[next]!;
-      next += 1;
-      try {
-        const r = await scoreOneOffer(
-          {
-            endpoint: opts.endpoint,
-            model: opts.model,
-            profile: opts.profile,
-            maxDescriptionChars: opts.maxDescriptionChars,
-            apiKey: opts.apiKey,
-            sessionId: opts.sessionId,
-            postJson,
-          },
-          offer,
-        );
-        saveScore(db, {
-          offerId: offer.id,
-          score: r.score,
-          reason: r.reason,
-          gaps: r.gaps,
-          model: opts.model,
-          profileHash,
-          scoredAt: now(),
-          labels: r.labels,
-          verdict: r.verdict,
-          blocker: r.blocker,
-          direction: r.direction,
-        });
-        scored += 1;
-        promptTokens += r.promptTokens;
-        completionTokens += r.completionTokens;
-        if (r.usedFallback) fallbackUsed = true;
-      } catch (e) {
-        failed += 1;
-        console.error(`score failed for offer ${offer.id}: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_SCORES, offers.length) }, () => worker()));
-  const summary: ScoringSummary = {
-    scored,
-    failed,
-    skipped,
-    wallMs: Date.now() - started,
-    promptTokens,
-    completionTokens,
-    fallbackUsed,
-  };
-  const exitCode = offers.length > 0 && failed === offers.length ? 1 : 0;
+  const state = await runLoop(offers, async (offer) => {
+    const r = await scoreOneOffer(
+      {
+        endpoint: opts.endpoint,
+        model: opts.model,
+        profile: opts.profile,
+        maxDescriptionChars: opts.maxDescriptionChars,
+        apiKey: opts.apiKey,
+        sessionId: opts.sessionId,
+        postJson,
+      },
+      offer,
+    );
+    saveScore(db, {
+      offerId: offer.id,
+      score: r.score,
+      reason: r.reason,
+      gaps: r.gaps,
+      model: opts.model,
+      profileHash,
+      scoredAt: now(),
+      labels: r.labels,
+      verdict: r.verdict,
+      blocker: r.blocker,
+      direction: r.direction,
+    });
+    return r;
+  });
+  const summary: ScoringSummary = { ...state, skipped, wallMs: Date.now() - started };
+  const exitCode = offers.length > 0 && state.failed === offers.length ? 1 : 0;
+  return { summary, exitCode };
+}
+
+/**
+ * Second-opinion run: same prompt and profile, another model, stored in
+ * `offer_opinions` for offers missing an opinion for this profile+model hash.
+ * Never touches `offer_scores` and never sets LLM labels.
+ */
+export async function runSecondOpinion(
+  db: Database,
+  opts: RunScoringOptions,
+): Promise<{ summary: ScoringSummary; exitCode: number }> {
+  const started = Date.now();
+  const profileHash = profileHashOf(opts.profile, opts.model);
+  const offers = opinionsToScore(db, { profileHash, ...(opts.limit === undefined ? {} : { limit: opts.limit }) });
+  const skipped =
+    opts.limit === undefined
+      ? 0
+      : Math.max(0, countOpinionsToScore(db, profileHash) - offers.length);
+  const now = opts.now ?? (() => new Date().toISOString());
+  const postJson = opts.postJson ?? defaultPostJson;
+  const state = await runLoop(offers, async (offer) => {
+    const r = await scoreOneOffer(
+      {
+        endpoint: opts.endpoint,
+        model: opts.model,
+        profile: opts.profile,
+        maxDescriptionChars: opts.maxDescriptionChars,
+        apiKey: opts.apiKey,
+        sessionId: opts.sessionId,
+        postJson,
+      },
+      offer,
+    );
+    saveOpinion(db, {
+      offerId: offer.id,
+      score: r.score,
+      verdict: r.verdict,
+      reason: r.reason,
+      gaps: r.gaps,
+      model: opts.model,
+      profileHash,
+      scoredAt: now(),
+    });
+    return r;
+  });
+  const summary: ScoringSummary = { ...state, skipped, wallMs: Date.now() - started };
+  const exitCode = offers.length > 0 && state.failed === offers.length ? 1 : 0;
   return { summary, exitCode };
 }

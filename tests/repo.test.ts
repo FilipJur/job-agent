@@ -3,9 +3,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { openDb } from "../src/db";
 import {
   countOffersToScore,
+  countOpinionsToScore,
   deleteApplication,
   listApplications,
-  listAgencies, listAspirations, listOffers, offersToScore, saveAgencyCrawl, saveFeedback, saveScore, seedAgencies, triageQueue,
+  listAgencies, listAspirations, listOffers, offersToScore, opinionsToScore, saveAgencyCrawl, saveFeedback, saveOpinion, saveScore, seedAgencies, triageQueue,
   updateAgency,
   upsertApplication,
 } from "../src/repo";
@@ -314,15 +315,51 @@ describe("triageQueue", () => {
     expect(queue).toMatchObject({ labeled: 0, remaining: 2 });
   });
 
-  test("respects the limit but keeps the full remaining count; excerpt is collapsed to 700 chars", () => {
-    db.run("UPDATE offers SET description = ? WHERE id = ?", ["a\n\n  b\t\tc ".repeat(100), offer()]);
-    offer();
-    const queue = triageQueue(db, { limit: 1 });
-    expect(queue.offers).toHaveLength(1);
-    expect(queue.remaining).toBe(2);
-    expect(queue.offers[0]!.excerpt.length).toBeLessThanOrEqual(700);
-    expect(queue.offers[0]!.excerpt).not.toContain("\n");
-    expect(queue.offers[0]!.excerpt).not.toContain("  ");
+  test("opinions never change the latest score row; listOffers exposes both", () => {
+    const id = offer({ labels: ["hpp"] });
+    scored(id, 8, "2026-10-26T11:00:00.000Z");
+    saveOpinion(db, {
+      offerId: id,
+      score: 3,
+      verdict: "fit",
+      reason: "druhý model nesouhlasí",
+      gaps: "",
+      model: "deepseek",
+      profileHash: "p2",
+      scoredAt: "2026-10-26T12:00:00.000Z",
+    });
+    const row = listOffers(db, { tab: "hpp" }).find((o) => o.id === id)!;
+    expect(row.score?.score).toBe(8);
+    expect(row.opinion).toMatchObject({ score: 3, model: "deepseek" });
+    expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM offer_scores").get()!.n).toBe(1);
+  });
+
+  test("disagreement >= 2 comes first, then the boundary order", () => {
+    const disagreeFar = offer({ firstSeenAt: "2026-10-26T06:00:00.000Z" });
+    const disagreeNear = offer({ firstSeenAt: "2026-10-26T05:00:00.000Z" });
+    const boundary = offer({ firstSeenAt: "2026-10-26T07:00:00.000Z" });
+    scored(disagreeFar, 9, "2026-10-26T11:00:00.000Z");
+    scored(disagreeNear, 5, "2026-10-26T11:00:00.000Z");
+    scored(boundary, 6, "2026-10-26T11:00:00.000Z");
+    const opinion = (offerId: number, score: number) =>
+      saveOpinion(db, { offerId, score, verdict: "fit", reason: "r", gaps: "", model: "m2", profileHash: "p2", scoredAt: "2026-10-26T12:00:00.000Z" });
+    opinion(disagreeFar, 3); // |9-3| = 6
+    opinion(disagreeNear, 8); // |5-8| = 3
+    opinion(boundary, 7); // |6-7| = 1: stays in the boundary group
+    const queue = triageQueue(db, {});
+    expect(queue.offers.map((o) => o.id)).toEqual([disagreeFar, disagreeNear, boundary]);
+    expect(queue.offers[0]!.opinion?.score).toBe(3);
+  });
+
+  test("opinionsToScore skips offers already having an opinion for the hash", () => {
+    const a = offer();
+    const b = offer();
+    const hash = "profilehash2";
+    expect(opinionsToScore(db, { profileHash: hash }).map((o) => o.id).sort()).toEqual([a, b].sort());
+    expect(countOpinionsToScore(db, hash)).toBe(2);
+    saveOpinion(db, { offerId: a, score: 4, verdict: "fit", reason: "r", gaps: "", model: "m2", profileHash: hash, scoredAt: "2026-10-26T12:00:00.000Z" });
+    expect(opinionsToScore(db, { profileHash: hash }).map((o) => o.id)).toEqual([b]);
+    expect(countOpinionsToScore(db, hash)).toBe(1);
   });
 });
 

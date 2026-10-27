@@ -7,8 +7,8 @@ import { listAgencies, saveAgencyCrawl, seedAgencies } from "../repo";
 import type { AgencySeed } from "../types";
 import agencySeeds from "../../config/agencies.json";
 import { createCachedFetch, type HttpMode } from "../http-cache";
-import { loadScoringConfig } from "../scoring/config";
-import { runScoring } from "../scoring/run";
+import { loadScoringConfig, secondModel } from "../scoring/config";
+import { runScoring, runSecondOpinion } from "../scoring/run";
 import { COLLECTORS, collectSources, dueSources, printRuns } from "./collect";
 import { printResult } from "./tune";
 import { generateProposal } from "../tune/generate";
@@ -101,7 +101,32 @@ async function main(argv: string[]): Promise<void> {
         `wall=${(summary.wallMs / 1000).toFixed(1)}s tokens=${summary.promptTokens}+${summary.completionTokens} ` +
         `cost=$${cost.toFixed(4)}${summary.fallbackUsed ? " (json_object fallback used)" : ""}`,
     );
-    // Weekly profile proposal; skipped on --limit smoke runs. A failure is printed, never fails the run.
+    // Second opinion after the primary scoring; missing config = off. Failures print, never fail the run.
+    try {
+      const opinionModel = secondModel() ?? scoringConfig.secondModel;
+      if (opinionModel !== undefined) {
+        const second = await runSecondOpinion(db, {
+          profile,
+          model: opinionModel,
+          endpoint: scoringConfig.endpoint,
+          maxDescriptionChars: scoringConfig.maxDescriptionChars,
+          apiKey,
+          sessionId: process.env.OPENCODE_GO_SESSION ?? crypto.randomUUID(),
+          ...(limit === null ? {} : { limit }),
+        });
+        const s = second.summary;
+        const secondCost =
+          (s.promptTokens / 1_000_000) * scoringConfig.prices.inputPer1M +
+          (s.completionTokens / 1_000_000) * scoringConfig.prices.outputPer1M;
+        console.log(
+          `second model=${opinionModel} scored=${s.scored} failed=${s.failed} skipped=${s.skipped} ` +
+            `wall=${(s.wallMs / 1000).toFixed(1)}s tokens=${s.promptTokens}+${s.completionTokens} ` +
+            `cost=$${secondCost.toFixed(4)}${s.fallbackUsed ? " (json_object fallback used)" : ""}`,
+        );
+      }
+    } catch (e) {
+      console.error(`second opinion failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
     try {
       if (limit === null && isTuneDue(Date.now())) {
         markTuneAttempt(Date.now());

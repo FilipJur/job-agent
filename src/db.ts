@@ -62,6 +62,20 @@ CREATE TABLE IF NOT EXISTS offer_scores (
 );
 CREATE INDEX IF NOT EXISTS idx_offer_scores_offer ON offer_scores (offer_id);
 
+CREATE TABLE IF NOT EXISTS offer_opinions (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  offer_id     INTEGER NOT NULL REFERENCES offers (id) ON DELETE CASCADE,
+  score        REAL NOT NULL CHECK (score >= 0 AND score <= 10),
+  reason       TEXT NOT NULL,
+  gaps         TEXT NOT NULL,
+  model        TEXT NOT NULL,
+  profile_hash TEXT NOT NULL,
+  verdict      TEXT NOT NULL DEFAULT 'fit' CHECK (verdict IN ('fit', 'blocked', 'aspiration')),
+  scored_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_offer_opinions_offer ON offer_opinions (offer_id);
+CREATE INDEX IF NOT EXISTS idx_offer_opinions_hash ON offer_opinions (offer_id, profile_hash);
+
 CREATE TABLE IF NOT EXISTS feedback (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   offer_id   INTEGER NOT NULL REFERENCES offers (id) ON DELETE CASCADE,
