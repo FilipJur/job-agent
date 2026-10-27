@@ -1,9 +1,12 @@
+import { AnimatePresence, motion, useIsPresent } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { clearVerdict, fetchTriage, sendVerdict } from "./api";
+import { clearVerdict, fetchTriageCached, sendVerdict } from "./api";
 import { DraftPanel } from "./DraftPanel";
 import { formatDate, formatDateTime, formatSalary, WORKPLACE_LABELS } from "./format";
-import { checkbox, fieldLabel, linkButton, meta, note, tag } from "./ui";
-import { ScoreBar, SecondOpinion } from "./OffersView";
+import { useKeys } from "./keys";
+import { OfflineLine } from "./OfflineLine";
+import { checkbox, fieldLabel, linkButton, meta, note, tag, touchTarget } from "./ui";
+import { exitOffset, ScoreBar, SecondOpinion } from "./OffersView";
 import type { TriageOffer, Verdict } from "./types";
 
 interface VerdictAction {
@@ -30,8 +33,11 @@ const CHIPS: { key: string; label: string }[] = [
   { key: "u", label: "firma" },
 ];
 
-const isTyping = (target: EventTarget | null): boolean =>
-  target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+const cardVariants = {
+  enter: { opacity: 0, y: 8 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.16 } },
+  exit: (verdict: Verdict | "skip" | null) => ({ opacity: 0, ...exitOffset(verdict), transition: { duration: 0.14 } }),
+};
 
 const joinReason = (chips: string[], text: string): string | undefined => {
   const parts = [...chips];
@@ -154,7 +160,7 @@ function TriageCard({ offer, chips, freeText, pending, draftOpen, onToggleChip, 
           <button
             key={action.verdict}
             type="button"
-            className="text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal disabled:opacity-50"
+            className={`text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal disabled:opacity-50 ${touchTarget}`}
             title={`${action.title} (${action.key})`}
             disabled={pending}
             onClick={() => onVerdict(action.verdict)}
@@ -164,7 +170,7 @@ function TriageCard({ offer, chips, freeText, pending, draftOpen, onToggleChip, 
         ))}
         <button
           type="button"
-          className="text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal disabled:opacity-50"
+          className={`text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal disabled:opacity-50 ${touchTarget}`}
           title="Připravit odpověď (d)"
           aria-expanded={draftOpen}
           onClick={onToggleDraft}
@@ -173,14 +179,14 @@ function TriageCard({ offer, chips, freeText, pending, draftOpen, onToggleChip, 
         </button>
         <button
           type="button"
-          className="text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal disabled:opacity-50"
+          className={`text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal disabled:opacity-50 ${touchTarget}`}
           title="Přeskočit (s nebo →)"
           disabled={pending}
           onClick={onSkip}
         >
           <span className="text-faint">[s]</span> přeskočit
         </button>
-        <a className="text-xs font-medium tracking-[0.1em] uppercase" href={offer.url} target="_blank" rel="noreferrer noopener" title="Otevřít inzerát (o)">
+        <a className={`text-xs font-medium tracking-[0.1em] uppercase ${touchTarget}`} href={offer.url} target="_blank" rel="noreferrer noopener" title="Otevřít inzerát (o)">
           <span className="text-faint">[o]</span> otevřít
         </a>
       </div>
@@ -217,6 +223,8 @@ export function TriageView({
   const [chips, setChips] = useState<string[]>([]);
   const [freeText, setFreeText] = useState("");
   const [draftOpen, setDraftOpen] = useState(false);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
+  const [exit, setExit] = useState<Verdict | "skip" | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const seenIds = useRef(new Set<number>());
   const loadingRef = useRef(false);
@@ -230,13 +238,14 @@ export function TriageView({
       if (loadingRef.current) return;
       loadingRef.current = true;
       try {
-        const data = await fetchTriage(limit, signal);
+        const { data, cachedAt: stamp } = await fetchTriageCached(limit, signal);
         if (signal.aborted) return;
         const fresh = data.offers.filter((offer) => !known.has(offer.id));
         for (const offer of fresh) known.add(offer.id);
         setQueue((current) => [...current, ...fresh]);
         setLabeled(data.labeled);
         setRemaining(data.remaining);
+        setCachedAt(stamp);
         setFailed(null);
         countsRef.current?.({ labeled: data.labeled, remaining: data.remaining });
       } catch (cause) {
@@ -289,6 +298,7 @@ export function TriageView({
       const offer = q[0];
       if (offer === undefined || stateRef.current.pending) return;
       setPending(true);
+      setExit(verdict);
       setQueue(q.slice(1));
       setHistory((h) => [...h, { id: offer.id, offer }]);
       resetReasons();
@@ -312,6 +322,7 @@ export function TriageView({
   const skip = useCallback(() => {
     const { queue: q } = stateRef.current;
     if (q[0] === undefined || stateRef.current.pending) return;
+    setExit("skip");
     setQueue([...q.slice(1), q[0]!]);
     resetReasons();
   }, []);
@@ -340,43 +351,35 @@ export function TriageView({
 
   const toggleDraft = useCallback(() => setDraftOpen((open) => !open), []);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key === "Escape") {
-        if (isTyping(event.target)) (event.target as HTMLElement).blur();
-        return;
-      }
-      if (isTyping(event.target)) return;
-      const key = event.key;
-      const chip = CHIPS.find((c) => c.key === key);
-      if (chip) {
-        event.preventDefault();
-        toggleChip(chip.label);
-        return;
-      }
-      if (key === "1") void answer("up");
-      else if (key === "2") void answer("down");
-      else if (key === "3") void answer("aspiration");
-      else if (key === "h") void answer("hidden");
-      else if (key === "d") toggleDraft();
-      else if (key === "s" || key === "ArrowRight") {
-        event.preventDefault();
-        skip();
-      } else if (key === "o") {
-        const offer = stateRef.current.queue[0];
-        if (offer) window.open(offer.url, "_blank", "noopener,noreferrer");
-      } else if (key === "z") void undo();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [answer, skip, undo, toggleChip, toggleDraft]);
+  const present = useIsPresent();
+  useKeys((event) => {
+    const key = event.key;
+    const chip = CHIPS.find((c) => c.key === key);
+    if (chip) {
+      event.preventDefault();
+      toggleChip(chip.label);
+      return;
+    }
+    if (key === "1") void answer("up");
+    else if (key === "2") void answer("down");
+    else if (key === "3") void answer("aspiration");
+    else if (key === "h") void answer("hidden");
+    else if (key === "d") toggleDraft();
+    else if (key === "s" || key === "ArrowRight") {
+      event.preventDefault();
+      skip();
+    } else if (key === "o") {
+      const offer = stateRef.current.queue[0];
+      if (offer) window.open(offer.url, "_blank", "noopener,noreferrer");
+    } else if (key === "z") void undo();
+  }, present);
 
   return (
     <div>
       <p className="mb-4 text-sm text-muted tabular-nums" aria-live="polite">
         {loading && queue.length === 0 && failed === null ? "načítám…" : `označeno ${labeled} · zbývá ${remaining}`}
       </p>
+      <OfflineLine cachedAt={cachedAt} />
       {failed !== null && queue.length === 0 ? (
         <p className="py-10 text-muted" role="alert">
           {failed}{" "}
@@ -384,33 +387,48 @@ export function TriageView({
             [zkusit znovu]
           </button>
         </p>
-      ) : current !== null ? (
-        <TriageCard
-          offer={current}
-          chips={chips}
-          freeText={freeText}
-          pending={pending}
-          draftOpen={draftOpen}
-          onToggleChip={toggleChip}
-          onFreeText={setFreeText}
-          onVerdict={(verdict) => void answer(verdict)}
-          onSkip={skip}
-          onToggleDraft={toggleDraft}
-          onError={onError}
-          onMissingFacts={onMissingFacts}
-        />
       ) : (
-        !loading && (
-          <p className="grid max-w-[60ch] gap-2 py-10 text-muted">
-            $ triage/ <br />
-            <span className={note}>(hotovo) Všechny nabídky mají verdikt. Nové přibudou po dalším běhu collect.</span>
-            {history.length > 0 && (
-              <button type="button" className={`${linkButton} justify-self-start`} onClick={() => void undo()} disabled={pending}>
-                [z] vrátit poslední verdikt
-              </button>
-            )}
-          </p>
-        )
+        <>
+          <div className="relative overflow-x-clip">
+            <AnimatePresence mode="popLayout" initial={false} custom={exit}>
+              {current !== null && (
+                <motion.div
+                  key={current.id}
+                  variants={cardVariants}
+                  initial="enter"
+                  animate="show"
+                  exit="exit"
+                >
+                  <TriageCard
+                    offer={current}
+                    chips={chips}
+                    freeText={freeText}
+                    pending={pending}
+                    draftOpen={draftOpen}
+                    onToggleChip={toggleChip}
+                    onFreeText={setFreeText}
+                    onVerdict={(verdict) => void answer(verdict)}
+                    onSkip={skip}
+                    onToggleDraft={toggleDraft}
+                    onError={onError}
+                    onMissingFacts={onMissingFacts}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+          {current === null && !loading && (
+            <p className="grid max-w-[60ch] gap-2 py-10 text-muted">
+              $ triage/ <br />
+              <span className={note}>(hotovo) Všechny nabídky mají verdikt. Nové přibudou po dalším běhu collect.</span>
+              {history.length > 0 && (
+                <button type="button" className={`${linkButton} justify-self-start`} onClick={() => void undo()} disabled={pending}>
+                  [z] vrátit poslední verdikt
+                </button>
+              )}
+            </p>
+          )}
+        </>
       )}
       {history.length > 0 && current !== null && (
         <p className="mt-4 text-sm text-faint">

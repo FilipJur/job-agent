@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchMarket } from "./api";
+import { fetchMarketCached } from "./api";
 import { formatDate } from "./format";
+import { OfflineLine } from "./OfflineLine";
 import { fieldLabel, linkButton, meta, tag } from "./ui";
 import type { MarketReport, RateBand, RateForm, RatePlace, SkillStat } from "./types";
 
@@ -138,12 +139,14 @@ function LeverageSection({ leverage }: { leverage: SkillStat[] }) {
         {leverage.map((row) => (
           <li key={row.skill} className="flex flex-wrap items-center gap-x-[2ch] gap-y-1">
             <span className="w-[14ch] shrink-0 text-sm font-medium">{row.skill}</span>
-            <span
-              className="h-[10px] min-w-[2px] flex-1 basis-24 bg-signal/70"
-              style={{ width: `${((row.leverage / top) * 100).toFixed(1)}%`, flexGrow: 0 }}
-              role="img"
-              aria-label={`${row.skill}: leverage ${row.leverage}`}
-            />
+            <span className="h-[10px] min-w-[2px] flex-1 basis-24">
+              <span
+                className="block h-full bg-signal/70"
+                style={{ width: `${((row.leverage / top) * 100).toFixed(1)}%`, minWidth: "2px" }}
+                role="img"
+                aria-label={`${row.skill}: leverage ${row.leverage}`}
+              />
+            </span>
             <span className="text-sm text-muted tabular-nums">
               {row.leverage}× · v mezerách u {row.gapMentions} téměř-vhodných nabídek
             </span>
@@ -256,15 +259,17 @@ function SamplesSection({ samples }: { samples: MarketReport["samples"] }) {
 
 export function MarketView({ onError }: { onError: (message: string) => void }) {
   const [report, setReport] = useState<MarketReport | null>(null);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchMarket(controller.signal)
-      .then((data) => {
+    fetchMarketCached(controller.signal)
+      .then(({ data, cachedAt: stamp }) => {
         if (!controller.signal.aborted) {
           setReport(data);
+          setCachedAt(stamp);
           setFailed(null);
         }
       })
@@ -299,6 +304,7 @@ export function MarketView({ onError }: { onError: (message: string) => void }) 
 
   return (
     <section className="grid gap-4">
+      <OfflineLine cachedAt={cachedAt} />
       <p className="text-sm text-muted tabular-nums" aria-live="polite">
         {report.offers} nabídek · {report.withRate} se sazbou · {formatDate(report.generatedAt)}
       </p>

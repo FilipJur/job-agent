@@ -1,6 +1,6 @@
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchAgencies, fetchApplications, fetchAspirations, fetchOffers, fetchTriage, patchAgency, toggleFeedback } from "./api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchAgenciesCached, fetchApplicationsCached, fetchAspirations, fetchOffersCached, fetchTriageCached, patchAgency, toggleFeedback } from "./api";
 import type { OfferFilters } from "./api";
 import { needsFollowUp, PipelineView } from "./PipelineView";
 import { AgenciesView } from "./AgenciesView";
@@ -9,12 +9,26 @@ import { applyFilters, MIN_SCORES, NO_CLIENT_FILTERS } from "./filters";
 import type { ClientFilters } from "./filters";
 import { agencyCount, offerRatio } from "./format";
 import { linkButton } from "./ui";
+import { OfflineLine } from "./OfflineLine";
+import { HelpOverlay } from "./HelpOverlay";
+import { useKeys, useLeaderKeys } from "./keys";
 import { OfferFilterBar } from "./OfferFilterBar";
 import { OffersView } from "./OffersView";
 import { MarketView } from "./MarketView";
 import { ProfileView } from "./ProfileView";
 import { TriageView } from "./TriageView";
 import type { AgencyPatch, AgencyRow, AspirationRow, OfferRow, Tab, Verdict } from "./types";
+
+const GO_KEYS: Record<string, View> = {
+  h: "hpp",
+  k: "kontrakty",
+  t: "triage",
+  p: "pipeline",
+  a: "agencies",
+  m: "market",
+  f: "profile",
+  s: "aspirace",
+};
 
 type View = Tab | "triage" | "pipeline" | "aspirace" | "agencies" | "profile" | "market";
 
@@ -84,6 +98,7 @@ export function App() {
   const [loaded, setLoaded] = useState<{ tab: Tab; rows: OfferRow[] } | null>(null);
   const [agencies, setAgencies] = useState<AgencyRow[] | null>(null);
   const [aspirations, setAspirations] = useState<AspirationRow[] | null>(null);
+  const [offlineAt, setOfflineAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pendingOffer, setPendingOffer] = useState<number | null>(null);
@@ -91,8 +106,10 @@ export function App() {
   const [overdue, setOverdue] = useState<number | null>(null);
   const [savingAgency, setSavingAgency] = useState<number | null>(null);
   const [reload, setReload] = useState(0);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
   const showError = useCallback((message: string) => setError(message), []);
-
+  const closeHelp = useCallback(() => setHelpOpen(false), []);
   const goProfile = useCallback(() => {
     window.location.hash = "profile";
   }, []);
@@ -119,12 +136,19 @@ export function App() {
     const controller = new AbortController();
     setLoading(true);
     setError(null);
+    setOfflineAt(null);
     const load =
       view === "aspirace"
         ? fetchAspirations(controller.signal).then(setAspirations)
         : view === "agencies"
-          ? fetchAgencies(controller.signal).then(setAgencies)
-          : fetchOffers(view, serverFilters, controller.signal).then((rows) => setLoaded({ tab: view, rows }));
+          ? fetchAgenciesCached(controller.signal).then(({ data, cachedAt }) => {
+            setAgencies(data);
+            setOfflineAt(cachedAt);
+          })
+          : fetchOffersCached(view, serverFilters, controller.signal).then(({ data, cachedAt }) => {
+            setLoaded({ tab: view, rows: data });
+            setOfflineAt(cachedAt);
+          });
     load
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) setError(`Načtení selhalo: ${errorText(cause)}`);
@@ -137,15 +161,15 @@ export function App() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchTriage(1, controller.signal)
-      .then((data) => {
+    fetchTriageCached(1, controller.signal)
+      .then(({ data }) => {
         if (!controller.signal.aborted) setTriageRemaining(data.remaining);
       })
       .catch(() => {
         // The tab stays usable without a count; TriageView reports its own errors.
       });
-    fetchApplications(controller.signal)
-      .then((data) => {
+    fetchApplicationsCached(controller.signal)
+      .then(({ data }) => {
         if (!controller.signal.aborted) setOverdue((data ?? []).filter((row) => needsFollowUp(row)).length);
       })
       .catch(() => {
@@ -198,23 +222,41 @@ export function App() {
     }
   };
 
+  useEffect(() => {
+    navRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [view]);
+
+  useLeaderKeys((key) => {
+    const next = GO_KEYS[key];
+    if (next === undefined) return false;
+    window.location.hash = next;
+    return true;
+  });
+
+  useKeys((event) => {
+    if (event.key === "?") {
+      event.preventDefault();
+      setHelpOpen(true);
+    }
+  });
+
   const isOffers = view !== "agencies" && view !== "profile" && view !== "aspirace" && view !== "triage" && view !== "market" && view !== "pipeline";
 
   return (
     <MotionConfig reducedMotion="user">
-      <header className="sticky top-0 z-10 border-b border-line bg-bg">
-        <div className="mx-auto flex max-w-[108ch] items-center justify-between gap-4 px-4">
+      <header className="sticky top-0 z-10 border-b border-line bg-bg pt-[env(safe-area-inset-top)]">
+        <div className="mx-auto flex max-w-[108ch] items-center justify-between gap-4 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))]">
           <h1 className="hidden text-[0.75rem] font-semibold tracking-[0.3em] text-faint uppercase sm:block">
             <span className="mr-[1ch] text-signal">$</span>job-agent
           </h1>
-          <nav className="-mx-4 flex overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Sekce">
+          <nav ref={navRef} className="no-scrollbar -mx-4 flex min-w-0 flex-nowrap overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Sekce">
             {TABS.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
                 role="tab"
                 aria-selected={view === tab.key}
-                className={`relative px-3 py-2 text-xs font-medium tracking-[0.14em] whitespace-nowrap uppercase transition-colors hover:text-fg aria-selected:text-bg aria-selected:font-semibold${tab.aside ? " ml-[2ch] border-l border-line pl-[calc(0.75rem+2ch)]" : " text-muted"}`}
+                className={`relative shrink-0 px-3 py-2 text-xs font-medium tracking-[0.14em] whitespace-nowrap uppercase transition-colors hover:text-fg aria-selected:text-bg aria-selected:font-semibold${tab.aside ? " ml-[2ch] border-l border-line pl-[calc(0.75rem+2ch)]" : " text-muted"}`}
                 onClick={() => selectView(tab.key)}
               >
                 {view === tab.key && (
@@ -231,7 +273,7 @@ export function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[108ch] px-4 pt-5 pb-16 sm:pt-6">
+      <main className="relative mx-auto max-w-[108ch] pt-5 pr-[max(1rem,env(safe-area-inset-right))] pb-[calc(4rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] sm:pt-6">
         {error !== null && (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border border-bad px-3 py-1.5 text-sm" role="alert">
             <span>
@@ -247,15 +289,16 @@ export function App() {
             </span>
           </div>
         )}
+        {(isOffers || view === "agencies") && <OfflineLine cachedAt={offlineAt} />}
 
-        <AnimatePresence mode="wait" initial={false}>
+        <AnimatePresence mode="popLayout" initial={false}>
           <motion.div
             key={view}
             className={loading && isOffers && rows !== null ? "opacity-70 transition-opacity" : "transition-opacity"}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.1 }}
+            transition={{ duration: 0.15 }}
           >
             {isOffers && (
               <>
@@ -323,26 +366,27 @@ export function App() {
           </motion.div>
         </AnimatePresence>
       </main>
-      <footer className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-bg">
-        <div className="mx-auto flex max-w-[108ch] items-center justify-between gap-4 px-4">
+      <footer className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-bg pb-[env(safe-area-inset-bottom)]">
+        <div className="mx-auto flex max-w-[108ch] items-center justify-between gap-4 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))]">
           <span className="bg-signal px-2 text-[0.75rem] font-semibold tracking-[0.2em] text-bg">{view.toUpperCase()}</span>
           <span className="hidden text-[0.75rem] tracking-[0.06em] text-faint sm:block">
             {isOffers
-              ? "j/k pohyb · u d r a h verdikt · o otevřít · / hledat · esc zrušit"
+              ? "j/k pohyb · 1 2 3 r h verdikt · d návrh · o otevřít · / hledat · g+písmeno jít · ? nápověda"
               : view === "triage"
-                ? "1 hodí se · 2 nehodí se · 3 aspirace · h skrýt · d návrh · s přeskočit · o otevřít · z vrátit"
+                ? "1 hodí se · 2 nehodí se · 3 aspirace · h skrýt · d návrh · s přeskočit · o otevřít · z vrátit · ? nápověda"
                 : view === "pipeline"
-                  ? "fáze a poznámky se ukládají hned · další krok hlídá termín"
+                  ? "fáze a poznámky se ukládají hned · další krok hlídá termín · ? nápověda"
                 : view === "aspirace"
-                ? "klik na aktivní verdikt ho zruší · jiný verdikt vrátí nabídku do práce"
+                ? "klik na aktivní verdikt ho zruší · jiný verdikt vrátí nabídku do práce · ? nápověda"
                 : view === "agencies"
-                  ? "stav a poznámky se ukládají hned"
+                  ? "stav a poznámky se ukládají hned · ? nápověda"
                   : view === "market"
-                    ? "sazby z inzerátů · klik na vzorky je rozbalí"
-                    : "uložit tlačítkem, přehodnocení při dalším scoringu"}
+                    ? "sazby z inzerátů · klik na vzorky je rozbalí · ? nápověda"
+                    : "uložit tlačítkem, přehodnocení při dalším scoringu · ? nápověda"}
           </span>
         </div>
       </footer>
+      {helpOpen && <HelpOverlay view={view} onClose={closeHelp} />}
     </MotionConfig>
   );
 }

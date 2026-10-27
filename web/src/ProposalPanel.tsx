@@ -102,6 +102,11 @@ export function ProposalPanel({ onApplied, onError, refreshKey = 0 }: { onApplie
       });
     return () => controller.abort();
   }, [onError, refreshKey]);
+  const stale = proposals?.some((proposal) => proposal.status === "pending" && proposal.stale) ?? false;
+  // A refetch that marks the pending proposal stale must close an open confirm row: the apply is impossible now.
+  useEffect(() => {
+    if (stale) setConfirming(false);
+  }, [stale]);
 
   if (proposals === null || proposals.length === 0) return null;
 
@@ -178,7 +183,7 @@ export function ProposalPanel({ onApplied, onError, refreshKey = 0 }: { onApplie
             {confirming ? (
               <>
                 <span className="text-sm">Přepíše data/profile.md; další běh přeskóruje vše.</span>
-                <button type="button" className={primaryButton} disabled={busy} onClick={() => void runAction(applyProposal, pending.id, true)}>
+                <button type="button" className={primaryButton} disabled={busy || pending.stale} onClick={() => void runAction(applyProposal, pending.id, true)}>
                   ano, použít
                 </button>
                 <button type="button" className={linkButton} disabled={busy} onClick={() => setConfirming(false)}>

@@ -33,5 +33,9 @@ export const tag = "text-[0.75rem] font-medium tracking-[0.12em] uppercase";
 /** Commentary voice: the model's remarks, quotes, hints. Italic is reserved for this. */
 export const note = "italic";
 
+/** Verdict and action buttons: a 44 px hit area on phones and touch screens, text-sized with a mouse. */
+export const touchTarget =
+  "max-sm:inline-flex max-sm:min-h-11 max-sm:min-w-11 max-sm:items-center max-sm:gap-[1ch] max-sm:pr-3 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:gap-[1ch] pointer-coarse:pr-3";
+
 /** Row of box-drawing characters used as a horizontal rule; clipped, never wraps. */
 export const RULE = "─".repeat(300);
