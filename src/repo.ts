@@ -5,6 +5,7 @@ import type {
   AgencyRow,
   AgencySeed,
   AgencyStatus,
+  AspirationRow,
   OfferRow,
   OfferToScore,
   ScoreInput,
@@ -207,6 +208,53 @@ export function saveScore(db: Database, s: ScoreInput): void {
     insertScore.run(s.offerId, s.score, s.reason, s.gaps, s.model, s.profileHash, s.verdict, s.blocker, s.direction, s.scoredAt);
     for (const label of s.labels ?? []) insertLabel.run(s.offerId, label);
   })();
+}
+
+interface AspirationQueryRow {
+  id: number;
+  title: string;
+  company: string | null;
+  url: string;
+  city: string | null;
+  workplace: Workplace;
+  location_text: string | null;
+  score: number;
+  reason: string;
+  direction: string | null;
+  gaps: string;
+  model: string;
+  scored_at: string;
+}
+
+/** Offers whose latest score row has verdict 'aspiration': score desc, then newest first. */
+export function listAspirations(db: Database): AspirationRow[] {
+  const rows = db
+    .query<AspirationQueryRow, []>(
+      `SELECT o.id, o.title, o.company, o.url, o.city, o.workplace, o.location_text,
+        s.score, s.reason, s.direction, s.gaps, s.model, s.scored_at
+      FROM offers o
+      ${LATEST_SCORE_JOIN}
+      WHERE s.verdict = 'aspiration'
+      ORDER BY s.score DESC, o.first_seen_at DESC, o.id DESC`,
+    )
+    .all();
+  const labels = labelsByOffer(db, rows.map((r) => r.id));
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    company: r.company,
+    url: r.url,
+    city: r.city,
+    workplace: r.workplace,
+    locationText: r.location_text,
+    score: r.score,
+    reason: r.reason,
+    direction: r.direction ?? "",
+    gaps: r.gaps,
+    labels: labels.get(r.id) ?? [],
+    model: r.model,
+    scoredAt: r.scored_at,
+  }));
 }
 
 /** Appends a feedback verdict; the latest row per offer is current. */

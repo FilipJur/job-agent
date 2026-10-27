@@ -95,6 +95,24 @@ export interface OfferRow {
   feedback: OfferFeedback | null;
 }
 
+/** One row of the Aspirations tab: the latest score verdict is 'aspiration'. */
+export interface AspirationRow {
+  id: number;
+  title: string;
+  company: string | null;
+  url: string;
+  city: string | null;
+  workplace: Workplace;
+  locationText: string | null;
+  score: number;
+  reason: string;
+  direction: string;
+  gaps: string;
+  labels: string[];
+  model: string;
+  scoredAt: string;
+}
+
 export interface ScoreInput {
   offerId: number;
   score: number;
