@@ -7,8 +7,8 @@ import { STAGE_LABELS, STAGE_ORDER } from "./types";
 
 const external = { target: "_blank", rel: "noreferrer noopener" } as const;
 
-/** Past local midnight: needs a follow-up. Exported for the Pipeline tab badge in App. */
-export function isOverdue(iso: string | null, now: Date = new Date()): boolean {
+/** Past local midnight: needs a follow-up. */
+function isOverdue(iso: string | null, now: Date = new Date()): boolean {
   if (iso === null) return false;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return false;
@@ -16,6 +16,11 @@ export function isOverdue(iso: string | null, now: Date = new Date()): boolean {
   today.setHours(0, 0, 0, 0);
   date.setHours(0, 0, 0, 0);
   return date.getTime() < today.getTime();
+}
+
+/** Follow-ups only count for stages awaiting a reply (same rule as the digest). */
+export function needsFollowUp(application: Application, now: Date = new Date()): boolean {
+  return (application.stage === "applied" || application.stage === "interview") && isOverdue(application.nextActionAt, now);
 }
 
 function isToday(iso: string | null): boolean {
@@ -28,15 +33,16 @@ function isToday(iso: string | null): boolean {
   return date.getTime() === today.getTime();
 }
 
-const nextActionClass = (iso: string | null): string => {
-  if (isOverdue(iso)) return "text-bad";
-  if (isToday(iso)) return "text-signal";
+const nextActionClass = (application: Application): string => {
+  if (needsFollowUp(application)) return "text-bad";
+  if (isToday(application.nextActionAt)) return "text-signal";
   return "text-faint";
 };
 
-const nextActionText = (iso: string | null): string => {
+const nextActionText = (application: Application): string => {
+  const iso = application.nextActionAt;
   if (iso === null) return "bez termínu";
-  if (isOverdue(iso)) return `po termínu ${formatDate(iso)}`;
+  if (needsFollowUp(application)) return `po termínu ${formatDate(iso)}`;
   if (isToday(iso)) return "dnes";
   return formatDate(iso);
 };
@@ -108,9 +114,9 @@ function PipelineCard({ application, pending, onStage, onNotes, onNextAction, on
         {application.score !== null && <span className="tabular-nums">skóre {application.score}</span>}
         {application.appliedAt !== null && <span title={application.appliedAt}>odesláno {formatDate(application.appliedAt)}</span>}
       </p>
-      <p className={`text-sm tabular-nums ${nextActionClass(application.nextActionAt)}`}>
+      <p className={`text-sm tabular-nums ${nextActionClass(application)}`}>
         <span className={`${tag} mr-[1ch]`}>další krok</span>
-        {nextActionText(application.nextActionAt)}
+        {nextActionText(application)}
       </p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <StageSelect
@@ -187,15 +193,15 @@ export function PipelineView({ onError }: { onError: (message: string) => void }
 
   const mutate = async (
     application: Application,
-    patch: { stage?: AppStage | null; nextActionAt?: string | null; notes?: string | null },
+    patch: { stage?: AppStage; nextActionAt?: string | null; notes?: string | null },
   ) => {
     setPendingId(application.offerId);
     try {
-      const updated = await saveApplication(application.offerId, {
-        stage: patch.stage !== undefined ? patch.stage : application.stage,
-        nextActionAt: patch.nextActionAt !== undefined ? patch.nextActionAt : application.nextActionAt,
-        notes: patch.notes !== undefined ? patch.notes : application.notes,
-      });
+      // Only changed keys go on the wire: an absent nextActionAt lets the backend default the first-`applied` follow-up.
+      const body: { stage: AppStage; nextActionAt?: string | null; notes?: string | null } = { stage: patch.stage ?? application.stage };
+      if (patch.nextActionAt !== undefined) body.nextActionAt = patch.nextActionAt;
+      if (patch.notes !== undefined) body.notes = patch.notes;
+      const updated = await saveApplication(application.offerId, body);
       setRows((current) => current?.map((row) => (row.offerId === updated.offerId ? updated : row)) ?? null);
     } catch (cause) {
       onError(`Uložení přihlášky selhalo: ${cause instanceof Error ? cause.message : String(cause)}`);

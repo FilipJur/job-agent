@@ -2,7 +2,7 @@ import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchAgencies, fetchApplications, fetchAspirations, fetchOffers, fetchTriage, patchAgency, toggleFeedback } from "./api";
 import type { OfferFilters } from "./api";
-import { isOverdue, PipelineView } from "./PipelineView";
+import { needsFollowUp, PipelineView } from "./PipelineView";
 import { AgenciesView } from "./AgenciesView";
 import { AspirationsView } from "./AspirationsView";
 import { applyFilters, MIN_SCORES, NO_CLIENT_FILTERS } from "./filters";
@@ -146,7 +146,7 @@ export function App() {
       });
     fetchApplications(controller.signal)
       .then((data) => {
-        if (!controller.signal.aborted) setOverdue((data ?? []).filter((row) => isOverdue(row.nextActionAt)).length);
+        if (!controller.signal.aborted) setOverdue((data ?? []).filter((row) => needsFollowUp(row)).length);
       })
       .catch(() => {
         // 404 until the backend worker lands: no badge.
