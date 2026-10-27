@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { openDb } from "../src/db";
-import { countOffersToScore, listAgencies, listAspirations, listOffers, offersToScore, saveAgencyCrawl, saveFeedback, saveScore, seedAgencies, updateAgency } from "../src/repo";
+import { countOffersToScore, listAgencies, listAspirations, listOffers, offersToScore, saveAgencyCrawl, saveFeedback, saveScore, seedAgencies, triageQueue, updateAgency } from "../src/repo";
 
 let db: Database;
 let seq = 0;
@@ -271,5 +271,50 @@ describe("agencies", () => {
       notes: "n",
       lastContactAt: "2026-10-26",
     });
+  });
+});
+
+describe("triageQueue", () => {
+  test("orders scored by closeness to 5, unscored last, ties newest first", () => {
+    const far = offer({ firstSeenAt: "2026-10-26T09:00:00.000Z" });
+    const near = offer({ firstSeenAt: "2026-10-26T08:00:00.000Z" });
+    const older = offer({ firstSeenAt: "2026-10-26T07:00:00.000Z" });
+    const unscored = offer({ firstSeenAt: "2026-10-26T10:00:00.000Z" });
+    scored(far, 9, "2026-10-26T11:00:00.000Z");
+    scored(near, 6, "2026-10-26T11:00:00.000Z");
+    scored(older, 4, "2026-10-26T11:00:00.000Z");
+    const queue = triageQueue(db, {});
+    expect(queue.offers.map((o) => o.id)).toEqual([near, older, far, unscored]);
+    expect(queue.remaining).toBe(4);
+    expect(queue.labeled).toBe(0);
+  });
+
+  test("excludes excluded and labelled offers; cleared returns to the queue; counts", () => {
+    const kept = offer();
+    const hidden = offer();
+    const excluded = offer({ labels: ["excluded"] });
+    scored(kept, 5, "2026-10-26T11:00:00.000Z");
+    scored(hidden, 5, "2026-10-26T11:00:00.000Z");
+    scored(excluded, 5, "2026-10-26T11:00:00.000Z");
+    verdict(hidden, "down", "2026-10-26T12:00:00.000Z");
+    let queue = triageQueue(db, {});
+    expect(queue.offers.map((o) => o.id)).toEqual([kept]);
+    expect(queue).toMatchObject({ labeled: 1, remaining: 1 });
+
+    verdict(hidden, "cleared", "2026-10-26T13:00:00.000Z");
+    queue = triageQueue(db, {});
+    expect(queue.offers.map((o) => o.id).sort()).toEqual([kept, hidden].sort());
+    expect(queue).toMatchObject({ labeled: 0, remaining: 2 });
+  });
+
+  test("respects the limit but keeps the full remaining count; excerpt is collapsed to 700 chars", () => {
+    db.run("UPDATE offers SET description = ? WHERE id = ?", ["a\n\n  b\t\tc ".repeat(100), offer()]);
+    offer();
+    const queue = triageQueue(db, { limit: 1 });
+    expect(queue.offers).toHaveLength(1);
+    expect(queue.remaining).toBe(2);
+    expect(queue.offers[0]!.excerpt.length).toBeLessThanOrEqual(700);
+    expect(queue.offers[0]!.excerpt).not.toContain("\n");
+    expect(queue.offers[0]!.excerpt).not.toContain("  ");
   });
 });

@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { join, resolve, sep } from "node:path";
 import { openDb } from "../db";
 import { readProfile, writeProfile } from "../profile";
-import { countOffersToScore, listAgencies, listAspirations, listOffers, saveFeedback, updateAgency } from "../repo";
+import { countOffersToScore, listAgencies, listAspirations, listOffers, saveFeedback, triageQueue, updateAgency } from "../repo";
 import { profileHashOf } from "../scoring/run";
 import { scoreModel } from "../scoring/config";
 import type { AgencyPatch, AgencyStatus } from "../types";
@@ -60,6 +60,16 @@ function offers(db: Database, url: URL): Response {
       includeHidden: flag(url.searchParams, "hidden"),
     }),
   );
+}
+
+function triage(db: Database, url: URL): Response {
+  const raw = url.searchParams.get("limit");
+  if (raw !== null) {
+    const limit = Number(raw);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) return fail(400, "limit must be an integer between 1 and 100");
+    return json(triageQueue(db, { limit }));
+  }
+  return json(triageQueue(db, { limit: 20 }));
 }
 
 /** POST appends a verdict and acknowledges it. */
@@ -173,6 +183,9 @@ async function route(req: Request, db: Database): Promise<Response> {
 
   if (path === "/api/offers") {
     return method === "GET" || method === "HEAD" ? offers(db, url) : fail(405, "use GET");
+  }
+  if (path === "/api/triage") {
+    return method === "GET" || method === "HEAD" ? triage(db, url) : fail(405, "use GET");
   }
   if (path === "/api/aspirations") {
     return method === "GET" || method === "HEAD" ? json(listAspirations(db)) : fail(405, "use GET");

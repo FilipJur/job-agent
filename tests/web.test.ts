@@ -116,6 +116,20 @@ describe("offers API", () => {
   });
 });
 
+describe("triage API", () => {
+  test("validates the limit and returns the queue shape for one seeded offer", async () => {
+    const id = offer(["hpp"]);
+    for (const path of ["/api/triage?limit=0", "/api/triage?limit=101", "/api/triage?limit=abc", "/api/triage?limit=2.5"]) {
+      expect((await call(path)).status).toBe(400);
+    }
+    const res = await call("/api/triage?limit=1");
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ labeled: 0, remaining: 1 });
+    expect(res.body.offers).toHaveLength(1);
+    expect(res.body.offers[0]).toMatchObject({ id, excerpt: expect.any(String) });
+  });
+});
+
 describe("agencies API", () => {
   test("PATCH persists status, notes and lastContactAt", async () => {
     const id = agencyId();
