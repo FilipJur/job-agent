@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { join, resolve, sep } from "node:path";
 import { openDb } from "../db";
+import { marketReport } from "../market/report";
 import { readProfile, writeProfile } from "../profile";
 import { countOffersToScore, listAgencies, listAspirations, listOffers, saveFeedback, triageQueue, updateAgency } from "../repo";
 import { profileHashOf } from "../scoring/run";
@@ -198,6 +199,9 @@ async function route(req: Request, db: Database): Promise<Response> {
     if (method === "POST") return postFeedback(req, db, id);
     if (method === "DELETE") return deleteFeedback(db, id);
     return fail(405, "use POST or DELETE");
+  }
+  if (path === "/api/market") {
+    return method === "GET" || method === "HEAD" ? json(marketReport(db)) : fail(405, "use GET");
   }
   if (path === "/api/agencies") {
     return method === "GET" || method === "HEAD" ? json(listAgencies(db)) : fail(405, "use GET");
