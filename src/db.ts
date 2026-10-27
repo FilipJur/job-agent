@@ -61,7 +61,6 @@ CREATE TABLE IF NOT EXISTS offer_scores (
   scored_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_offer_scores_offer ON offer_scores (offer_id);
-CREATE INDEX IF NOT EXISTS idx_offer_scores_verdict ON offer_scores (offer_id, verdict);
 
 CREATE TABLE IF NOT EXISTS feedback (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,5 +131,6 @@ export function openDb(path: string): Database {
   addColumnIfMissing(db, "offer_scores", "verdict", "TEXT NOT NULL DEFAULT 'fit' CHECK (verdict IN ('fit', 'blocked', 'aspiration'))");
   addColumnIfMissing(db, "offer_scores", "blocker", "TEXT");
   addColumnIfMissing(db, "offer_scores", "direction", "TEXT");
+  db.run("CREATE INDEX IF NOT EXISTS idx_offer_scores_verdict ON offer_scores (offer_id, verdict)");
   return db;
 }
