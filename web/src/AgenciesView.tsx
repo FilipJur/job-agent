@@ -1,10 +1,10 @@
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { crawlStatus, STATUS_LABELS, STATUSES, toDateInput, withHttps } from "./format";
-import { control, linkButton, primaryButton } from "./ui";
+import { control, fieldLabel, linkButton, primaryButton } from "./ui";
 import type { AgencyPatch, AgencyRow, AgencyStatus } from "./types";
 
-interface AgencyCardProps {
+interface AgencyItemProps {
   agency: AgencyRow;
   index: number;
   saving: boolean;
@@ -13,7 +13,7 @@ interface AgencyCardProps {
 
 const external = { target: "_blank", rel: "noreferrer noopener" } as const;
 
-function AgencyCard({ agency, index, saving, onSave }: AgencyCardProps) {
+function AgencyItem({ agency, index, saving, onSave }: AgencyItemProps) {
   const [notes, setNotes] = useState(agency.notes ?? "");
 
   useEffect(() => {
@@ -27,134 +27,135 @@ function AgencyCard({ agency, index, saving, onSave }: AgencyCardProps) {
 
   return (
     <motion.article
-      className={`grid content-start gap-3 rounded-xl border p-4 ${
-        agency.hiringIco ? "border-accent/45 bg-linear-to-br from-accent/10 to-surface" : "border-line bg-surface"
+      className={`relative grid gap-x-8 gap-y-3 rounded-md border border-line bg-surface p-4 @3xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_17rem] @3xl:rounded-none @3xl:border-0 @3xl:border-b @3xl:bg-transparent @3xl:px-3 @3xl:py-5 ${
+        agency.hiringIco ? "before:absolute before:inset-y-4 before:left-0 before:w-0.5 before:bg-signal @max-3xl:before:inset-y-3 @max-3xl:before:left-px" : ""
       }`}
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1], delay: Math.min(index, 8) * 0.03 }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1], delay: Math.min(index, 8) * 0.025 }}
     >
-      <header className="flex items-baseline justify-between gap-3">
-        <h3 className="font-display text-lg leading-snug font-medium text-balance">
+      <div className="grid content-start gap-1">
+        <h3 className="flex items-baseline gap-2 text-base leading-snug font-semibold text-balance">
           {agency.web !== null ? (
-            <a className="text-fg no-underline hover:text-accent hover:underline" href={withHttps(agency.web)} {...external}>
+            <a className="no-underline decoration-signal hover:underline" href={withHttps(agency.web)} {...external}>
               {agency.name}
             </a>
           ) : (
             agency.name
           )}
+          <span className="font-mono text-xs font-normal text-faint" title="Shoda s profilem">
+            fit {agency.fit}
+          </span>
         </h3>
-        <span className="shrink-0 rounded border border-line px-1.5 py-0.5 font-mono text-xs text-muted" title="Shoda s profilem">
-          fit {agency.fit}
-        </span>
-      </header>
+        {(agency.city !== null || agency.focus !== null) && (
+          <p className="text-sm text-muted text-pretty">
+            {agency.city !== null && <span className="font-medium text-fg">{agency.city}</span>}
+            {agency.city !== null && agency.focus !== null && " · "}
+            {agency.focus}
+          </p>
+        )}
+        {agency.stack !== null && <p className="font-mono text-xs text-faint text-pretty">{agency.stack}</p>}
+      </div>
 
-      {(agency.city !== null || agency.focus !== null || agency.stack !== null) && (
-        <div className="grid gap-0.5 text-sm text-muted">
-          {(agency.city !== null || agency.focus !== null) && (
-            <p className="text-pretty">
-              {agency.city !== null && <span className="font-medium text-fg/85">{agency.city}</span>}
-              {agency.city !== null && agency.focus !== null && " · "}
-              {agency.focus}
-            </p>
-          )}
-          {agency.stack !== null && <p className="font-mono text-xs text-pretty">{agency.stack}</p>}
-        </div>
-      )}
-
-      {(agency.hourlyRate !== null || agency.hiringIco) && (
-        <p className="flex flex-wrap gap-2">
-          {agency.hiringIco && (
-            <span className="rounded bg-accent px-2 py-0.5 text-xs font-semibold text-bg">hledají na IČO</span>
-          )}
-          {agency.hourlyRate !== null && (
-            <span className="rounded border border-good/50 px-2 py-0.5 font-mono text-xs text-good">{agency.hourlyRate}</span>
-          )}
+      <div className="grid content-start gap-2">
+        {(agency.hiringIco || agency.hourlyRate !== null) && (
+          <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+            {agency.hiringIco && (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-signal">
+                <span className="size-1.5 bg-signal" aria-hidden="true" />
+                hledají na IČO
+              </span>
+            )}
+            {agency.hourlyRate !== null && <span className="font-mono text-ok">{agency.hourlyRate}</span>}
+          </p>
+        )}
+        {agency.hiringEvidence !== null && (
+          <blockquote className="border-l border-line-strong pl-3 text-sm text-fg/85 text-pretty">
+            „{agency.hiringEvidence}“
+            {agency.careersUrl !== null && (
+              <>
+                {" "}
+                <a className="font-mono text-xs whitespace-nowrap" href={withHttps(agency.careersUrl)} {...external}>
+                  zdroj ↗
+                </a>
+              </>
+            )}
+          </blockquote>
+        )}
+        {agency.hiringEvidence === null && agency.careersUrl !== null && (
+          <a className={`${linkButton} justify-self-start`} href={withHttps(agency.careersUrl)} {...external}>
+            Kariérní stránka ↗
+          </a>
+        )}
+        <p className="font-mono text-xs text-faint" title={agency.crawledAt ?? undefined}>
+          {crawlStatus(agency.crawledAt)}
         </p>
-      )}
+      </div>
 
-      {agency.hiringEvidence !== null && (
-        <blockquote className="grid gap-1 border-l-2 border-accent/60 pl-3">
-          <p className="font-display text-[0.95rem] text-fg/90 italic text-pretty">„{agency.hiringEvidence}“</p>
-          {agency.careersUrl !== null && (
-            <a className="justify-self-start font-mono text-xs" href={withHttps(agency.careersUrl)} {...external}>
-              zdroj ↗
+      <div className="grid content-start gap-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+          {agency.contactUrl !== null && (
+            <a className={primaryButton} href={withHttps(agency.contactUrl)} {...external}>
+              Kontaktní formulář ↗
             </a>
           )}
-        </blockquote>
-      )}
-      {agency.hiringEvidence === null && agency.careersUrl !== null && (
-        <a className={`${linkButton} justify-self-start`} href={withHttps(agency.careersUrl)} {...external}>
-          Kariérní stránka ↗
-        </a>
-      )}
-
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-        {agency.contactUrl !== null && (
-          <a className={primaryButton} href={withHttps(agency.contactUrl)} {...external}>
-            Kontaktní formulář ↗
-          </a>
-        )}
-        {agency.contactUrl === null && agency.email !== null && (
-          <a className={primaryButton} href={`mailto:${agency.email}`}>
-            Napsat e-mail
-          </a>
-        )}
-        {agency.email !== null && <a href={`mailto:${agency.email}`}>{agency.email}</a>}
-        {agency.phone !== null && <a href={`tel:${agency.phone.replace(/\s+/g, "")}`}>{agency.phone}</a>}
-        {agency.contactUrl === null && agency.email === null && agency.phone === null && (
-          <span className="text-muted">kontakt neznámý</span>
-        )}
+          {agency.contactUrl === null && agency.email !== null && (
+            <a className={primaryButton} href={`mailto:${agency.email}`}>
+              Napsat e-mail
+            </a>
+          )}
+          {agency.email !== null && <a href={`mailto:${agency.email}`}>{agency.email}</a>}
+          {agency.phone !== null && <a href={`tel:${agency.phone.replace(/\s+/g, "")}`}>{agency.phone}</a>}
+          {agency.contactUrl === null && agency.email === null && agency.phone === null && (
+            <span className="text-muted">kontakt neznámý</span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="grid gap-1">
+            <span className={fieldLabel}>Stav</span>
+            <select
+              className={control}
+              value={agency.status}
+              disabled={saving}
+              aria-label={`Stav agentury ${agency.name}`}
+              onChange={(event) => onSave(agency, { status: event.currentTarget.value as AgencyStatus })}
+            >
+              {STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {STATUS_LABELS[status]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1">
+            <span className={fieldLabel}>Poslední kontakt</span>
+            <input
+              type="date"
+              className={control}
+              value={toDateInput(agency.lastContactAt)}
+              disabled={saving}
+              aria-label={`Poslední kontakt s ${agency.name}`}
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                onSave(agency, { lastContactAt: value === "" ? null : value });
+              }}
+            />
+          </label>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <label className="grid gap-1">
-          <span className="text-[0.65rem] tracking-widest text-muted uppercase">Stav</span>
-          <select
-            className={control}
-            value={agency.status}
-            disabled={saving}
-            aria-label={`Stav agentury ${agency.name}`}
-            onChange={(event) => onSave(agency, { status: event.currentTarget.value as AgencyStatus })}
-          >
-            {STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {STATUS_LABELS[status]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1">
-          <span className="text-[0.65rem] tracking-widest text-muted uppercase">Poslední kontakt</span>
-          <input
-            type="date"
-            className={control}
-            value={toDateInput(agency.lastContactAt)}
-            disabled={saving}
-            aria-label={`Poslední kontakt s ${agency.name}`}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              onSave(agency, { lastContactAt: value === "" ? null : value });
-            }}
-          />
-        </label>
-        <label className="col-span-2 grid gap-1">
-          <span className="text-[0.65rem] tracking-widest text-muted uppercase">Poznámky</span>
-          <textarea
-            className={`${control} field-sizing-content h-auto min-h-16 resize-y py-2`}
-            value={notes}
-            disabled={saving}
-            aria-label={`Poznámky pro ${agency.name}`}
-            placeholder="Poznámky…"
-            onChange={(event) => setNotes(event.currentTarget.value)}
-            onBlur={commitNotes}
-          />
-        </label>
-      </div>
-
-      <p className="font-mono text-xs text-muted" title={agency.crawledAt ?? undefined}>
-        {crawlStatus(agency.crawledAt)}
-      </p>
+      <label className="grid gap-1 @3xl:col-span-3">
+        <span className={fieldLabel}>Poznámky</span>
+        <textarea
+          className={`${control} field-sizing-content h-auto min-h-8 resize-y py-1.5 placeholder:text-faint`}
+          value={notes}
+          disabled={saving}
+          aria-label={`Poznámky pro ${agency.name}`}
+          placeholder="Kdo odpověděl, co slíbil, kdy se ozvat…"
+          onChange={(event) => setNotes(event.currentTarget.value)}
+          onBlur={commitNotes}
+        />
+      </label>
     </motion.article>
   );
 }
@@ -167,28 +168,26 @@ interface AgenciesViewProps {
 
 export function AgenciesView({ agencies, savingId, onSave }: AgenciesViewProps) {
   if (agencies === null) {
-    return <p className="py-16 text-center text-muted">Načítám agentury…</p>;
+    return <p className="py-12 text-muted">Načítám agentury…</p>;
   }
   if (agencies.length === 0) {
-    return (
-      <p className="py-16 text-center text-muted">Žádné agentury.</p>
-    );
+    return <p className="max-w-md py-12 text-muted">Seznam agentur je prázdný. Naplní ho <code className="font-mono text-fg">bun run agencies:seed</code>.</p>;
   }
   const hiring = agencies.filter((agency) => agency.hiringIco);
   const others = agencies.filter((agency) => !agency.hiringIco);
 
   const renderSection = (title: string, rows: AgencyRow[], empty: string) => (
     <section className="mb-10 @container" aria-label={title}>
-      <h2 className="mb-3 flex items-center gap-2 font-display text-xl font-medium">
+      <h2 className="mb-3 flex items-baseline gap-2 border-b border-line pb-2 text-sm font-semibold">
         {title}
-        <span className="rounded-full border border-line px-2 font-mono text-xs text-muted">{rows.length}</span>
+        <span className="font-mono text-xs font-normal text-faint tabular-nums">{rows.length}</span>
       </h2>
       {rows.length === 0 ? (
-        <p className="text-muted">{empty}</p>
+        <p className="py-2 text-sm text-muted">{empty}</p>
       ) : (
-        <div className="grid gap-4 @3xl:grid-cols-2">
+        <div className="grid gap-3 @3xl:gap-0">
           {rows.map((agency, index) => (
-            <AgencyCard key={agency.id} agency={agency} index={index} saving={savingId === agency.id} onSave={onSave} />
+            <AgencyItem key={agency.id} agency={agency} index={index} saving={savingId === agency.id} onSave={onSave} />
           ))}
         </div>
       )}
@@ -197,7 +196,7 @@ export function AgenciesView({ agencies, savingId, onSave }: AgenciesViewProps) 
 
   return (
     <>
-      {renderSection("Shánějí na IČO", hiring, "Zatím žádná agentura s doloženým hledáním na IČO.")}
+      {renderSection("Shánějí na IČO", hiring, "Zatím nikdo, u koho by crawler našel výslovné hledání na IČO. Zkontroluj, jestli už běžel.")}
       {renderSection("Ostatní agentury", others, "Žádné další agentury.")}
     </>
   );

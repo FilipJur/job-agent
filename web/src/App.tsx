@@ -6,6 +6,7 @@ import { AgenciesView } from "./AgenciesView";
 import { applyFilters, NO_CLIENT_FILTERS } from "./filters";
 import type { ClientFilters } from "./filters";
 import { agencyCount } from "./format";
+import { linkButton } from "./ui";
 import { OfferFilterBar } from "./OfferFilterBar";
 import { OffersView } from "./OffersView";
 import { ProfileView } from "./ProfileView";
@@ -28,6 +29,25 @@ const viewFromHash = (): View => {
 };
 
 const errorText = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause));
+
+/** Static placeholder rows with the same rhythm as real offers, so the page does not jump when data lands. */
+function OffersSkeleton({ loading }: { loading: boolean }) {
+  if (!loading) return null;
+  return (
+    <div aria-busy="true" aria-label="Načítám nabídky">
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="grid grid-cols-[2.5rem_1fr] gap-x-3 border-b border-line py-4 pl-3">
+          <div className="h-5 w-6 bg-raised" />
+          <div className="grid gap-2">
+            <div className="h-4 w-2/3 bg-raised" />
+            <div className="h-3.5 w-1/3 bg-raised/70" />
+            <div className="h-3.5 w-1/2 bg-raised/50" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function App() {
   const [view, setView] = useState<View>(viewFromHash);
@@ -118,12 +138,9 @@ export function App() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <header className="sticky top-0 z-10 border-b border-line bg-bg/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-5xl flex-col gap-1 px-4 pt-3 sm:flex-row sm:items-end sm:justify-between">
-          <h1 className="flex items-center gap-2.5 pb-1 font-display text-xl font-medium tracking-tight sm:pb-2.5">
-            <span className="size-2.5 rotate-45 bg-accent" aria-hidden="true" />
-            Pracovní nabídky
-          </h1>
+      <header className="scroll-rule sticky top-0 z-10 border-b border-line bg-bg/90 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-4xl items-end justify-between gap-4 px-4">
+          <h1 className="hidden pb-2.5 font-mono text-sm font-medium text-faint sm:block">job-agent</h1>
           <nav className="-mx-4 flex overflow-x-auto px-2 sm:mx-0 sm:px-0" role="tablist" aria-label="Sekce">
             {TABS.map((tab) => (
               <button
@@ -131,14 +148,14 @@ export function App() {
                 type="button"
                 role="tab"
                 aria-selected={view === tab.key}
-                className="relative px-3.5 py-2.5 text-sm font-medium whitespace-nowrap text-muted transition-colors hover:text-fg aria-selected:text-fg"
+                className="relative px-3 py-3 text-sm font-medium whitespace-nowrap text-muted transition-colors hover:text-fg aria-selected:text-fg"
                 onClick={() => selectView(tab.key)}
               >
                 {view === tab.key && (
                   <motion.span
                     layoutId="tab-underline"
-                    className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-accent"
-                    transition={{ type: "spring", duration: 0.35, bounce: 0.12 }}
+                    className="absolute inset-x-1.5 -bottom-px h-0.5 bg-signal"
+                    transition={{ type: "spring", duration: 0.35, bounce: 0.1 }}
                   />
                 )}
                 <span className="relative">{tab.label}</span>
@@ -148,13 +165,18 @@ export function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-5 sm:py-8">
+      <main className="mx-auto max-w-4xl px-4 py-5 sm:py-8">
         {error !== null && (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-low/50 bg-low/10 px-3 py-2 text-sm text-low" role="alert">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-l-2 border-bad bg-bad/10 py-2 pr-3 pl-3 text-sm" role="alert">
             <span>{error}</span>
-            <button type="button" className="text-lg leading-none" aria-label="Zavřít chybu" onClick={() => setError(null)}>
-              ×
-            </button>
+            <span className="flex gap-3">
+              <button type="button" className={linkButton} onClick={() => setReload((value) => value + 1)}>
+                Zkusit znovu
+              </button>
+              <button type="button" className={linkButton} onClick={() => setError(null)}>
+                Zavřít
+              </button>
+            </span>
           </div>
         )}
 
@@ -170,7 +192,7 @@ export function App() {
             {isOffers && (
               <>
                 {rows === null ? (
-                  <p className="py-16 text-center text-muted">{loading ? "Načítám nabídky…" : ""}</p>
+                  <OffersSkeleton loading={loading} />
                 ) : (
                   <>
                     <OfferFilterBar
@@ -195,7 +217,7 @@ export function App() {
             )}
             {view === "agencies" && (
               <>
-                <p className="mb-4 font-mono text-sm text-muted" aria-live="polite">
+                <p className="mb-4 font-mono text-sm text-muted tabular-nums" aria-live="polite">
                   {loading ? "Načítám…" : agencies === null ? "" : agencyCount(agencies.length)}
                 </p>
                 <AgenciesView agencies={agencies} savingId={savingAgency} onSave={saveAgency} />

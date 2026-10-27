@@ -22,7 +22,7 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
   }, [onError]);
 
   if (text === null) {
-    return <p className="py-16 text-center text-muted">Načítám profil…</p>;
+    return <p className="py-12 text-muted">Načítám profil…</p>;
   }
 
   const save = async () => {
@@ -41,7 +41,7 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
   return (
     <section className="grid gap-3">
       <textarea
-        className="min-h-96 w-full resize-y rounded-xl border border-line bg-surface p-4 font-mono text-sm leading-relaxed text-fg focus-visible:border-accent"
+        className="min-h-96 w-full resize-y rounded-md border border-line bg-surface p-4 font-mono text-sm leading-relaxed text-fg focus-visible:border-signal"
         aria-label="Profil"
         rows={20}
         value={text}
@@ -53,7 +53,7 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
         </button>
       </div>
       <p className="text-sm text-muted">Čeká na přehodnocení: {offerCount(pending)}</p>
-      <p className="text-sm text-muted [&_code]:rounded [&_code]:bg-raised [&_code]:px-1 [&_code]:font-mono">Přehodnotí se při příštím <code>daily</code> nebo <code>bun run score</code>.</p>
+      <p className="text-sm text-muted [&_code]:font-mono [&_code]:text-fg">Přehodnotí se při příštím <code>daily</code> nebo <code>bun run score</code>.</p>
     </section>
   );
 }
