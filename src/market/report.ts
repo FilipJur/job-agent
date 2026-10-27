@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { readProfile } from "../profile";
 import { type MarketConfig, marketConfig } from "./config";
 import { type RateForm, type RatePlace, formOf, offerRate, placeOf } from "./rates";
 import { type SkillStat, skillStats } from "./skills";
@@ -140,9 +141,10 @@ export function marketReport(db: Database, now: Date = new Date(), cfg: MarketCo
   const skills = skillStats(
     rows.map((r) => ({ text: `${r.title}\n${r.description}`, score: r.score, verdict: r.verdict, gaps: r.gaps })),
     cfg.skills,
+    readProfile(),
   );
   const leverage = skills
-    .filter((s) => s.leverage > 0)
+    .filter((s) => s.leverage > 0 && !s.owned)
     .sort((a, b) => b.leverage - a.leverage || b.gapMentions - a.gapMentions || a.skill.localeCompare(b.skill))
     .slice(0, LEVERAGE_TOP);
 

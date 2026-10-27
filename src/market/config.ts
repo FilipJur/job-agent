@@ -8,6 +8,8 @@ export interface SkillDef {
 export interface MarketConfig {
   currentRate: number;
   eurCzk: number;
+  usdCzk: number;
+  gbpCzk: number;
   hoursPerMonth: number;
   hoursPerYear: number;
   skills: SkillDef[];

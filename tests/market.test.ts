@@ -3,6 +3,7 @@ import { openDb } from "../src/db";
 import { marketConfig } from "../src/market/config";
 import { formOf, offerRate, placeOf, type RateInput } from "../src/market/rates";
 import { type MarketReport, marketReport, percentile } from "../src/market/report";
+import { skillStats, strengthsSection } from "../src/market/skills";
 
 const base: RateInput = { source: "jobscz", salaryMin: null, salaryMax: null, currency: null, rawJson: "{}", description: "" };
 const ashbyYearly = JSON.stringify({
@@ -23,7 +24,11 @@ describe("offerRate", () => {
     ["implausibly low salary dropped", { salaryMin: 10000, currency: "CZK" }, null],
     ["implausibly high text dropped", { description: "20 000 Kč/h" }, null],
     ["unknown source period dropped", { source: "hn", salaryMin: 100000, currency: "CZK" }, null],
-    ["daily rate is not hourly", { description: "7 000 Kč/MD" }, null],
+    ["text USD/hour", { description: "$23-$34 USD/hour" }, { czkPerHour: 621, basis: "text" }],
+    ["text GBP/hour", { description: "AI Engineer (£30/hr)" }, { czkPerHour: 873, basis: "text" }],
+    ["text EUR/month", { description: "Gross salary range €5000–€6000 per month" }, { czkPerHour: 859, basis: "text" }],
+    ["text USD/month", { description: "$3,500-$5,000 USD/month" }, { czkPerHour: 579, basis: "text" }],
+    ["text EUR month range", { description: "3,700 EUR - 5,000 EUR / Month" }, { czkPerHour: 680, basis: "text" }],
   ] as const)("%s", (_, patch, expected) => {
     expect(offerRate({ ...base, ...patch }, marketConfig)).toEqual(expected);
   });
@@ -87,5 +92,41 @@ describe("marketReport", () => {
       [1, 1, "fit", "Python", "2026-10-21T10:00:00Z"],
     ]);
     expect(r.leverage).toEqual([]);
+  });
+});
+
+describe("skillStats", () => {
+  const skills = [
+    { name: "Python", match: ["python"] },
+    { name: "React", match: ["react"] },
+    { name: "Java", match: ["java"] },
+  ];
+  const offers = [
+    { text: "x", score: 5, verdict: "fit", gaps: "React" },
+    { text: "x", score: 5, verdict: "fit", gaps: "Python" },
+  ];
+
+  test("owned counts as his: in skills with owned true, never boosted further", () => {
+    const stats = skillStats(offers, skills, "## Silné stránky\n- React\n");
+    expect(stats.find((s) => s.skill === "React")).toMatchObject({ owned: true, leverage: 1 });
+    expect(stats.find((s) => s.skill === "Python")).toMatchObject({ owned: false, leverage: 1 });
+  });
+
+  test("czech inflections match; javascriptu does not match java", () => {
+    const stats = skillStats(
+      [
+        { text: "znalost Pythonu výhodou", score: null, verdict: null, gaps: null },
+        { text: "znalost javascriptu", score: null, verdict: null, gaps: null },
+      ],
+      skills,
+    );
+    expect(stats.find((s) => s.skill === "Python")).toMatchObject({ offers: 1 });
+    expect(stats.find((s) => s.skill === "Java")).toMatchObject({ offers: 0 });
+  });
+
+  test("strengths section slicing", () => {
+    expect(strengthsSection("## Silné stránky\n- React\n## Slabé stránky\n- Python\n")).toContain("React");
+    expect(strengthsSection("## Silné stránky\n- React\n## Slabé stránky\n- Python\n")).not.toContain("Python");
+    expect(strengthsSection("no headings, whole profile: React")).toContain("React");
   });
 });
