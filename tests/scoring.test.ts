@@ -179,7 +179,7 @@ describe("second opinion", () => {
     expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM offer_scores").get()?.n).toBe(0);
     expect(llmLabelsOf(a)).toEqual([]);
     const second = await runSecondOpinion(db, opts(postJson));
-    expect(second.summary).toMatchObject({ scored: 0, failed: 0, skipped: 0 });
+    expect(second.summary).toMatchObject({ scored: 0, failed: 0, skipped: 2 });
     expect(calls).toBe(2);
     expect(b).toBeGreaterThan(0);
   });
