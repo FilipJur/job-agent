@@ -30,6 +30,8 @@ export interface LabeledOffer {
   reason: string | null;
   /** Latest score row (by `scored_at`, then id); null when the offer was never scored. */
   latestScore: StoredScore | null;
+  /** Latest stored second opinion; null when none was saved yet. */
+  latestOpinion: StoredScore | null;
 }
 
 /** Latest feedback row per offer, by `created_at` then id (the rule `src/repo.ts` uses); `cleared` means unlabeled. */
@@ -40,6 +42,10 @@ const LATEST_FEEDBACK = `JOIN feedback f ON f.offer_id = o.id AND f.verdict <> '
 const LATEST_SCORE = `LEFT JOIN offer_scores s ON s.offer_id = o.id AND NOT EXISTS (
     SELECT 1 FROM offer_scores s2 WHERE s2.offer_id = o.id
       AND (s2.scored_at > s.scored_at OR (s2.scored_at = s.scored_at AND s2.id > s.id)))`;
+
+const LATEST_OPINION = `LEFT JOIN offer_opinions op ON op.offer_id = o.id AND NOT EXISTS (
+    SELECT 1 FROM offer_opinions op2 WHERE op2.offer_id = o.id
+      AND (op2.scored_at > op.scored_at OR (op2.scored_at = op.scored_at AND op2.id > op.id)))`;
 
 interface LabeledRow {
   id: number;
@@ -53,6 +59,12 @@ interface LabeledRow {
   profile_hash: string | null;
   score_reason: string | null;
   gaps: string | null;
+  opinion_score: number | null;
+  opinion_verdict: ScoreVerdict | null;
+  opinion_model: string | null;
+  opinion_hash: string | null;
+  opinion_reason: string | null;
+  opinion_gaps: string | null;
 }
 
 /** Offers whose latest feedback is a verdict (not `cleared`), with their latest stored score; ordered by offer id. */
@@ -60,10 +72,13 @@ export function labeledOffers(db: Database): LabeledOffer[] {
   const rows = db
     .query<LabeledRow, []>(
       `SELECT o.id, o.title, o.company, f.verdict, f.reason AS feedback_reason,
-        s.score, s.verdict AS score_verdict, s.model, s.profile_hash, s.reason AS score_reason, s.gaps
+        s.score, s.verdict AS score_verdict, s.model, s.profile_hash, s.reason AS score_reason, s.gaps,
+        op.score AS opinion_score, op.verdict AS opinion_verdict, op.model AS opinion_model,
+        op.profile_hash AS opinion_hash, op.reason AS opinion_reason, op.gaps AS opinion_gaps
       FROM offers o
       ${LATEST_FEEDBACK}
       ${LATEST_SCORE}
+      ${LATEST_OPINION}
       ORDER BY o.id`,
     )
     .all();
@@ -83,6 +98,17 @@ export function labeledOffers(db: Database): LabeledOffer[] {
             profileHash: r.profile_hash ?? "",
             reason: r.score_reason ?? "",
             gaps: r.gaps ?? "",
+          },
+    latestOpinion:
+      r.opinion_score === null
+        ? null
+        : {
+            score: r.opinion_score,
+            verdict: r.opinion_verdict ?? "fit",
+            model: r.opinion_model ?? "",
+            profileHash: r.opinion_hash ?? "",
+            reason: r.opinion_reason ?? "",
+            gaps: r.opinion_gaps ?? "",
           },
   }));
 }

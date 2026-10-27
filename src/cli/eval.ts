@@ -79,6 +79,28 @@ async function main(argv: string[]): Promise<void> {
     const stored = computeMetrics(
       offers.map((o) => ({ offerId: o.offerId, label: o.label, score: o.latestScore?.score ?? null, verdict: o.latestScore?.verdict ?? null })),
     );
+    const opinionItems = offers.map((o) => ({
+      offerId: o.offerId,
+      label: o.label,
+      score: o.latestOpinion?.score ?? null,
+      verdict: o.latestOpinion?.verdict ?? null,
+    }));
+    const opinionScored = opinionItems.filter((i) => i.score !== null);
+    const opinion = opinionScored.length > 0 ? computeMetrics(opinionItems) : null;
+    const withOpinion = (cols: { name: string; metrics: EvalMetrics }[]) =>
+      opinion === null ? cols : [...cols, { name: "opinion", metrics: opinion }];
+    const printRecommendation = (): void => {
+      if (opinion === null || stored.auc === null || opinion.auc === null || stored.n < 10) {
+        console.log("\nmálo štítků pro doporučení");
+        return;
+      }
+      if (stored.auc === opinion.auc) {
+        console.log("\nmálo štítků pro doporučení");
+        return;
+      }
+      const better = opinion.auc > stored.auc ? "opinion" : "stored";
+      console.log(`\ndoporučení: vyšší AUC má ${better} (${num(stored.auc)} vs ${num(opinion.auc)})`);
+    };
     if (stored.positives < MIN_PER_CLASS || stored.negatives < MIN_PER_CLASS) {
       console.log(
         `notice: ${stored.positives} positive and ${stored.negatives} negative labels; ` +
@@ -87,9 +109,11 @@ async function main(argv: string[]): Promise<void> {
     }
 
     if (!values.replay) {
-      printTable([{ name: "stored", metrics: stored }]);
+      printTable(withOpinion([{ name: "stored", metrics: stored }]));
       printDisagreements("stored", stored, offers);
-      console.log(`\nwrote ${writeResult("stored", { offers, metrics: stored })}`);
+      if (opinion !== null) printDisagreements("opinion", opinion, offers);
+      printRecommendation();
+      console.log(`\nwrote ${writeResult("stored", { offers, metrics: stored, opinion: opinion === null ? null : { metrics: opinion, n: opinionScored.length } })}`);
       return;
     }
 
@@ -122,17 +146,22 @@ async function main(argv: string[]): Promise<void> {
       `replay model=${model} profile=${usedProfilePath} scored=${replay.items.length} failed=${replay.failed.length} ` +
         `tokens=${replay.promptTokens}+${replay.completionTokens} wall=${((Date.now() - started) / 1000).toFixed(1)}s\n`,
     );
-    printTable([
-      { name: "stored", metrics: stored },
-      { name: "replay", metrics: replay.metrics },
-    ]);
+    printTable(
+      withOpinion([
+        { name: "stored", metrics: stored },
+        { name: "replay", metrics: replay.metrics },
+      ]),
+    );
     printDisagreements("stored", stored, offers);
     printDisagreements("replay", replay.metrics, offers);
+    if (opinion !== null) printDisagreements("opinion", opinion, offers);
+    printRecommendation();
     const path = writeResult("replay", {
       model,
       profilePath: usedProfilePath,
       profileHash: profileHashOf(profile, model),
       stored: { offers, metrics: stored },
+      opinion: opinion === null ? null : { metrics: opinion, n: opinionScored.length },
       replay,
     });
     console.log(`\nwrote ${path}`);

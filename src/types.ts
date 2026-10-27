@@ -78,6 +78,27 @@ export interface OfferFeedback {
 /** What the model decided about an offer: fit = actionable, blocked = unusable now, aspiration = great fit, wrong timing/place. */
 export type ScoreVerdict = "fit" | "blocked" | "aspiration";
 
+export interface OfferOpinion {
+  score: number;
+  verdict: ScoreVerdict;
+  reason: string;
+  gaps: string;
+  model: string;
+  profileHash: string;
+  scoredAt: string;
+}
+
+export interface OpinionInput {
+  offerId: number;
+  score: number;
+  verdict: ScoreVerdict;
+  reason: string;
+  gaps: string;
+  model: string;
+  profileHash: string;
+  scoredAt: string;
+}
+
 export interface OfferRow {
   id: number;
   source: string;
@@ -94,6 +115,7 @@ export interface OfferRow {
   partial: boolean;
   labels: string[];
   score: OfferScore | null;
+  opinion: OfferOpinion | null;
   feedback: OfferFeedback | null;
 }
 

@@ -3,7 +3,7 @@ import { clearVerdict, fetchTriage, sendVerdict } from "./api";
 import { DraftPanel } from "./DraftPanel";
 import { formatDate, formatDateTime, formatSalary, WORKPLACE_LABELS } from "./format";
 import { checkbox, fieldLabel, linkButton, meta, note, tag } from "./ui";
-import { ScoreBar } from "./OffersView";
+import { ScoreBar, SecondOpinion } from "./OffersView";
 import type { TriageOffer, Verdict } from "./types";
 
 interface VerdictAction {
@@ -62,6 +62,7 @@ function TriageCard({ offer, chips, freeText, pending, draftOpen, onToggleChip, 
     <article className="border border-line bg-surface px-4 py-4 sm:px-5" data-triage-id={offer.id} aria-label={`Triáž: ${offer.title}`}>
       <div className="flex flex-wrap items-baseline gap-x-[2ch] gap-y-0.5">
         <ScoreBar score={score?.score} />
+        {score !== null && offer.opinion !== null && <SecondOpinion score={score.score} opinion={offer.opinion} />}
         <h2 className="min-w-[20ch] flex-1 text-[1.25rem] leading-snug font-semibold text-balance">
           <a href={offer.url} target="_blank" rel="noreferrer noopener">
             {offer.title}

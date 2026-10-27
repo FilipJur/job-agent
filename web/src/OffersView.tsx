@@ -94,6 +94,12 @@ export function ScoreBar({ score }: { score: number | undefined }) {
   );
 }
 
+/** "druhý názor N (model)" next to the score when it differs by >= 2 points, warning colour. */
+export function SecondOpinion({ score, opinion }: { score: number; opinion: { score: number; model: string } }): React.ReactNode {
+  if (Math.abs(score - opinion.score) < 2) return null;
+  return <span className={`${tag} text-bad`}>druhý názor {opinion.score} ({opinion.model})</span>;
+}
+
 interface OfferRowProps {
   offer: OfferRow;
   selected: boolean;
@@ -236,6 +242,7 @@ function OfferItem({ offer, selected, pending, copilotReady, application, onSele
       <div className="grid min-w-0 gap-1 col-start-2">
         <div className="flex flex-wrap items-baseline gap-x-[2ch] gap-y-0.5">
           <ScoreBar score={score?.score} />
+          {score !== null && offer.opinion !== null && <SecondOpinion score={score.score} opinion={offer.opinion} />}
           <h2 className="min-w-[20ch] flex-1 text-[1.125rem] leading-snug font-semibold text-balance">
             <a
               className="text-fg no-underline decoration-signal hover:underline"

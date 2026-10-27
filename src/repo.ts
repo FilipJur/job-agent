@@ -13,8 +13,10 @@ import type {
   Draft,
   FeedbackVerdict,
   OfferFeedback,
+  OfferOpinion,
   OfferRow,
   OfferToScore,
+  OpinionInput,
   ScoreInput,
   ScoreVerdict,
   Tab,
@@ -49,11 +51,14 @@ const CONTRACT_COND = "EXISTS (SELECT 1 FROM offer_labels l WHERE l.offer_id = o
 const LATEST_SCORE_JOIN = `LEFT JOIN offer_scores s ON s.offer_id = o.id AND NOT EXISTS (
     SELECT 1 FROM offer_scores s2 WHERE s2.offer_id = o.id
       AND (s2.scored_at > s.scored_at OR (s2.scored_at = s.scored_at AND s2.id > s.id)))`;
+/** Latest stored second opinion per offer; scores live in `offer_scores`, never here. */
+const LATEST_OPINION_JOIN = `LEFT JOIN offer_opinions op ON op.offer_id = o.id AND NOT EXISTS (
+    SELECT 1 FROM offer_opinions op2 WHERE op2.offer_id = o.id
+      AND (op2.scored_at > op.scored_at OR (op2.scored_at = op.scored_at AND op2.id > op.id)))`;
 /** No user verdict: either never rated, or the last row cleared the previous one. */
 const NO_USER_VERDICT = "(f.id IS NULL OR f.verdict = 'cleared')";
 /** User verdicts that keep the offer in the HPP/Kontrakty tabs no matter the model verdict. */
 const USER_IN_TABS = "f.verdict IN ('up', 'down', 'responded')";
-/** The model's fit (or no score yet) leaves the offer in the tabs. */
 const MODEL_IN_TABS = "COALESCE(s.verdict, 'fit') = 'fit'";
 const LATEST_FEEDBACK_JOIN = `LEFT JOIN feedback f ON f.offer_id = o.id AND NOT EXISTS (
     SELECT 1 FROM feedback f2 WHERE f2.offer_id = o.id
@@ -81,6 +86,13 @@ interface OfferQueryRow {
   score_verdict: ScoreVerdict | null;
   blocker: string | null;
   direction: string | null;
+  opinion_score: number | null;
+  opinion_reason: string | null;
+  opinion_gaps: string | null;
+  opinion_model: string | null;
+  opinion_hash: string | null;
+  opinion_at: string | null;
+  opinion_verdict: ScoreVerdict | null;
   verdict: FeedbackVerdict | null;
   feedback_reason: string | null;
   feedback_at: string | null;
@@ -114,6 +126,18 @@ function toOfferRow(r: OfferQueryRow, labels: string[]): OfferRow {
             blocker: r.blocker ?? "",
             direction: r.direction ?? "",
           },
+    opinion:
+      r.opinion_score === null
+        ? null
+        : {
+            score: r.opinion_score,
+            verdict: r.opinion_verdict ?? "fit",
+            reason: r.opinion_reason ?? "",
+            gaps: r.opinion_gaps ?? "",
+            model: r.opinion_model ?? "",
+            profileHash: r.opinion_hash ?? "",
+            scoredAt: r.opinion_at ?? "",
+          },
     feedback:
       r.verdict === null || r.verdict === "cleared"
         ? null
@@ -145,9 +169,12 @@ export function listOffers(db: Database, q: ListOffersQuery): OfferRow[] {
       `SELECT o.id, o.source, o.url, o.title, o.company, o.city, o.workplace,
         o.salary_min, o.salary_max, o.currency, o.published_at, o.first_seen_at, o.partial,
         s.score, s.reason, s.gaps, s.model, s.scored_at, s.verdict AS score_verdict, s.blocker, s.direction,
+        op.score AS opinion_score, op.reason AS opinion_reason, op.gaps AS opinion_gaps,
+        op.model AS opinion_model, op.profile_hash AS opinion_hash, op.scored_at AS opinion_at, op.verdict AS opinion_verdict,
         f.verdict, f.reason AS feedback_reason, f.created_at AS feedback_at
       FROM offers o
       ${LATEST_SCORE_JOIN}
+      ${LATEST_OPINION_JOIN}
       ${LATEST_FEEDBACK_JOIN}
       WHERE ${where.join(" AND ")}
       ORDER BY (s.score IS NULL), s.score DESC, o.first_seen_at DESC, o.id DESC`,
@@ -178,8 +205,10 @@ export function excerptOf(description: string): string {
 
 /**
  * Triage queue: offers with no current user verdict (a `cleared` verdict counts as
- * unlabeled) and without the `excluded` label. Scored offers closest to the decision
- * boundary (score 5) come first, unscored last, ties newest first.
+ * unlabeled) and without the `excluded` label. Offers where the primary score and
+ * the second opinion disagree by >= 2 points come first (largest disagreement first),
+ * then scored offers closest to the decision boundary (score 5), unscored last,
+ * ties newest first.
  */
 export function triageQueue(db: Database, q: TriageQueueQuery = {}): TriageQueue {
   const where = `${NOT_EXCLUDED} AND ${NO_USER_VERDICT}`;
@@ -193,18 +222,24 @@ export function triageQueue(db: Database, q: TriageQueueQuery = {}): TriageQueue
       `SELECT COUNT(*) AS n FROM offers o ${LATEST_FEEDBACK_JOIN} WHERE ${NOT_EXCLUDED} AND NOT ${NO_USER_VERDICT}`,
     )
     .get()!.n;
+  /** 0 when both scores exist and disagree by >= 2, else 1; NULL is fine (one group). */
+  const disagree = `(CASE WHEN s.score IS NOT NULL AND op.score IS NOT NULL AND ABS(s.score - op.score) >= 2 THEN 0 ELSE 1 END)`;
+  const disagreeBy = `(CASE WHEN s.score IS NOT NULL AND op.score IS NOT NULL AND ABS(s.score - op.score) >= 2 THEN ABS(s.score - op.score) END)`;
   type Row = OfferQueryRow & { description: string };
   const rows = db
     .query<Row, [number]>(
       `SELECT o.id, o.source, o.url, o.title, o.company, o.city, o.workplace,
         o.salary_min, o.salary_max, o.currency, o.published_at, o.first_seen_at, o.partial, o.description,
         s.score, s.reason, s.gaps, s.model, s.scored_at, s.verdict AS score_verdict, s.blocker, s.direction,
+        op.score AS opinion_score, op.reason AS opinion_reason, op.gaps AS opinion_gaps,
+        op.model AS opinion_model, op.profile_hash AS opinion_hash, op.scored_at AS opinion_at, op.verdict AS opinion_verdict,
         f.verdict, f.reason AS feedback_reason, f.created_at AS feedback_at
       FROM offers o
       ${LATEST_SCORE_JOIN}
+      ${LATEST_OPINION_JOIN}
       ${LATEST_FEEDBACK_JOIN}
       WHERE ${where}
-      ORDER BY (s.score IS NULL), ABS(s.score - 5), o.first_seen_at DESC, o.id DESC
+      ORDER BY ${disagree}, ${disagreeBy} DESC, (s.score IS NULL), ABS(s.score - 5), o.first_seen_at DESC, o.id DESC
       LIMIT ?`,
     )
     .all(q.limit ?? -1);
@@ -276,6 +311,49 @@ function labelsByOffer(db: Database, ids: number[]): Map<number, string[]> {
     else byOffer.set(row.offer_id, [row.label]);
   }
   return byOffer;
+}
+
+/** Offers missing a second opinion for this profile+model hash; newest first. */
+export function opinionsToScore(db: Database, q: OffersToScoreQuery): OfferToScore[] {
+  const rows = db
+    .query<ScoreQueryRow, [string, number]>(
+      `SELECT o.id, o.title, o.company, o.location_text, o.city, o.workplace, o.description
+      FROM offers o
+      WHERE ${NOT_EXCLUDED}
+        AND NOT EXISTS (SELECT 1 FROM offer_opinions op WHERE op.offer_id = o.id AND op.profile_hash = ?)
+      ORDER BY o.first_seen_at DESC, o.id DESC
+      LIMIT ?`,
+    )
+    .all(q.profileHash, q.limit ?? -1);
+  const labels = labelsByOffer(db, rows.map((r) => r.id));
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    company: r.company,
+    locationText: r.location_text,
+    city: r.city,
+    workplace: r.workplace,
+    description: r.description,
+    labels: labels.get(r.id) ?? [],
+  }));
+}
+
+/** Appends a second opinion. Never touches `offer_scores`; labels are the primary run's job. */
+export function saveOpinion(db: Database, o: OpinionInput): void {
+  db.prepare(
+    "INSERT INTO offer_opinions (offer_id, score, reason, gaps, model, profile_hash, verdict, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(o.offerId, o.score, o.reason, o.gaps, o.model, o.profileHash, o.verdict, o.scoredAt);
+}
+
+/** Number of offers `opinionsToScore` would return for this profile hash, without a limit. */
+export function countOpinionsToScore(db: Database, profileHash: string): number {
+  return db
+    .query<{ n: number }, [string]>(
+      `SELECT COUNT(*) AS n FROM offers o
+      WHERE ${NOT_EXCLUDED}
+        AND NOT EXISTS (SELECT 1 FROM offer_opinions op WHERE op.offer_id = o.id AND op.profile_hash = ?)`,
+    )
+    .get(profileHash)!.n;
 }
 
 /** Appends a score; optional new labels are stored with origin 'llm'. */
