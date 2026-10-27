@@ -4,10 +4,10 @@ export type {
   AspirationRow,
   AgencyStatus,
   FeedbackVerdict,
-  OfferFeedback,
   OfferRow,
   OfferScore,
   Tab,
   Verdict,
   Workplace,
 } from "../../src/types";
+export type { TriageOffer, TriageQueue } from "../../src/repo";

@@ -1,6 +1,6 @@
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchAgencies, fetchAspirations, fetchOffers, patchAgency, toggleFeedback } from "./api";
+import { fetchAgencies, fetchAspirations, fetchOffers, fetchTriage, patchAgency, toggleFeedback } from "./api";
 import type { OfferFilters } from "./api";
 import { AgenciesView } from "./AgenciesView";
 import { AspirationsView } from "./AspirationsView";
@@ -11,13 +11,15 @@ import { linkButton } from "./ui";
 import { OfferFilterBar } from "./OfferFilterBar";
 import { OffersView } from "./OffersView";
 import { ProfileView } from "./ProfileView";
+import { TriageView } from "./TriageView";
 import type { AgencyPatch, AgencyRow, AspirationRow, OfferRow, Tab, Verdict } from "./types";
 
-type View = Tab | "aspirace" | "agencies" | "profile";
+type View = Tab | "triage" | "aspirace" | "agencies" | "profile";
 
 const TABS: { key: View; label: string; aside?: boolean }[] = [
   { key: "hpp", label: "HPP" },
   { key: "kontrakty", label: "Kontrakty" },
+  { key: "triage", label: "Triáž" },
   { key: "agencies", label: "Agentury" },
   { key: "profile", label: "Profil" },
   { key: "aspirace", label: "Aspirace", aside: true },
@@ -80,6 +82,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pendingOffer, setPendingOffer] = useState<number | null>(null);
+  const [triageRemaining, setTriageRemaining] = useState<number | null>(null);
   const [savingAgency, setSavingAgency] = useState<number | null>(null);
   const [reload, setReload] = useState(0);
   const showError = useCallback((message: string) => setError(message), []);
@@ -99,7 +102,7 @@ export function App() {
   }, [clientFilters]);
 
   useEffect(() => {
-    if (view === "profile") {
+    if (view === "profile" || view === "triage") {
       setLoading(false);
       return;
     }
@@ -121,6 +124,18 @@ export function App() {
       });
     return () => controller.abort();
   }, [view, serverFilters, reload]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchTriage(1, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setTriageRemaining(data.remaining);
+      })
+      .catch(() => {
+        // The tab stays usable without a count; TriageView reports its own errors.
+      });
+    return () => controller.abort();
+  }, [view, reload]);
 
   const rows = useMemo(() => (loaded !== null && loaded.tab === view ? loaded.rows : null), [loaded, view]);
   const visible = useMemo(() => (rows === null ? [] : applyFilters(rows, clientFilters)), [rows, clientFilters]);
@@ -165,7 +180,7 @@ export function App() {
     }
   };
 
-  const isOffers = view !== "agencies" && view !== "profile" && view !== "aspirace";
+  const isOffers = view !== "agencies" && view !== "profile" && view !== "aspirace" && view !== "triage";
 
   return (
     <MotionConfig reducedMotion="user">
@@ -191,7 +206,7 @@ export function App() {
                     transition={{ duration: 0.12, ease: "linear" }}
                   />
                 )}
-                <span className="relative">{tab.label}</span>
+                <span className="relative">{tab.label}{tab.key === "triage" && triageRemaining !== null ? ` ${triageRemaining}` : ""}</span>
               </button>
             ))}
           </nav>
@@ -274,6 +289,7 @@ export function App() {
                 <AgenciesView agencies={agencies} savingId={savingAgency} onSave={saveAgency} />
               </>
             )}
+            {view === "triage" && <TriageView onError={showError} />}
             {view === "profile" && <ProfileView onError={showError} />}
           </motion.div>
         </AnimatePresence>
@@ -284,7 +300,9 @@ export function App() {
           <span className="hidden text-[0.75rem] tracking-[0.06em] text-faint sm:block">
             {isOffers
               ? "j/k pohyb · u d r a h verdikt · o otevřít · / hledat · esc zrušit"
-              : view === "aspirace"
+              : view === "triage"
+                ? "1 hodí se · 2 nehodí se · 3 aspirace · h skrýt · s přeskočit · o otevřít · z vrátit"
+                : view === "aspirace"
                 ? "klik na aktivní verdikt ho zruší · jiný verdikt vrátí nabídku do práce"
                 : view === "agencies"
                   ? "stav a poznámky se ukládají hned"
