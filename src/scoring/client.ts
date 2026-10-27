@@ -50,28 +50,22 @@ export interface ScoringClientOptions {
   postJson: PostJson;
 }
 
-const JSON_SCHEMA_FORMAT = {
-  type: "json_schema",
-  json_schema: {
-    name: "offer_score",
-    schema: {
-      type: "object",
-      properties: {
-        verdict: { type: "string", enum: ["fit", "blocked", "aspiration"] },
-        score: { type: "number", minimum: 0, maximum: 10 },
-        reason: { type: "string" },
-        gaps: { type: "string" },
-        blocker: { type: "string" },
-        direction: { type: "string" },
-        labels: { type: "array", items: { type: "string", enum: [...LLM_LABELS] } },
-      },
-      required: ["verdict", "score", "reason", "gaps", "blocker", "direction", "labels"],
-      additionalProperties: false,
-    },
+const OFFER_SCORE_SCHEMA = {
+  type: "object",
+  properties: {
+    verdict: { type: "string", enum: ["fit", "blocked", "aspiration"] },
+    score: { type: "number", minimum: 0, maximum: 10 },
+    reason: { type: "string" },
+    gaps: { type: "string" },
+    blocker: { type: "string" },
+    direction: { type: "string" },
+    labels: { type: "array", items: { type: "string", enum: [...LLM_LABELS] } },
   },
+  required: ["verdict", "score", "reason", "gaps", "blocker", "direction", "labels"],
+  additionalProperties: false,
 };
 
-const JSON_OBJECT_FORMAT = { type: "json_object" };
+const JSON_SCHEMA_FORMAT = { type: "json_schema", name: "offer_score", schema: OFFER_SCORE_SCHEMA };
 
 export function buildUserMessage(offer: OfferToScore, maxDescriptionChars: number): string {
   const lines = [
@@ -80,7 +74,7 @@ export function buildUserMessage(offer: OfferToScore, maxDescriptionChars: numbe
     `Lokalita: ${offer.locationText ?? offer.city ?? "neuvedena"}`,
     `Pracoviště: ${offer.workplace}`,
     `Popis: ${offer.description.slice(0, maxDescriptionChars)}`,
-    `Ohodnoť tuto nabídku podle profilu v systémové zprávě. Odpověz pouze JSON objektem ` +
+    `Ohodnoť tuto nabídku podle profilu výše. Odpověz pouze JSON objektem ` +
       `{"verdict": "fit"|"blocked"|"aspiration", "score": number 0-10, "reason": string, "gaps": string, "blocker": string, "direction": string, "labels": string[]}. ` +
       `Verdikt: "fit" = akční nabídka; "blocked" = teď nepoužitelná (onsite mimo Olomouc/okolí bez remote, nutná relokace/víza mimo EU, vyloučená oblast) — pak uveď blocker jednou větou česky a direction prázdné; ` +
       `"aspiration" = technicky skvělý fit (7+), ale teď nepoužitelná okolnostmi — pak uveď direction (kam směřovat / co se naučit, česky) a blocker stručně; ` +
@@ -134,40 +128,39 @@ export function parseScoreReply(text: string): ParsedReply {
   };
 }
 
-interface ChatResponse {
-  choices?: Array<{ message?: { content?: unknown } }>;
-  usage?: { prompt_tokens?: number; completion_tokens?: number };
+interface ResponsesResponse {
+  output?: Array<{ type?: unknown; content?: Array<{ text?: unknown }> }>;
+  usage?: { input_tokens?: number; output_tokens?: number };
 }
 
 function extractContent(body: string): { text: string; promptTokens: number; completionTokens: number } {
-  let res: ChatResponse;
+  let res: ResponsesResponse;
   try {
-    res = JSON.parse(body) as ChatResponse;
+    res = JSON.parse(body) as ResponsesResponse;
   } catch {
     throw new Error("API reply is not JSON");
   }
-  const content = res.choices?.[0]?.message?.content;
-  if (typeof content !== "string" || content.length === 0) throw new Error("API reply has no message content");
+  const message = res.output?.find((item) => item.type === "message");
+  const text = message?.content?.[0]?.text;
+  if (typeof text !== "string" || text.length === 0) throw new Error("API reply has no message content");
   return {
-    text: content,
-    promptTokens: res.usage?.prompt_tokens ?? 0,
-    completionTokens: res.usage?.completion_tokens ?? 0,
+    text,
+    promptTokens: res.usage?.input_tokens ?? 0,
+    completionTokens: res.usage?.output_tokens ?? 0,
   };
 }
 
-/** Scores one offer; falls back to json_object when the API rejects the JSON schema. */
+/** Scores one offer; falls back to no text.format when the API rejects the JSON schema. */
 export async function scoreOneOffer(opts: ScoringClientOptions, offer: OfferToScore): Promise<ScoreResult> {
+  const input = `${opts.profile}\n\n${buildUserMessage(offer, opts.maxDescriptionChars)}`;
   const base = {
     model: opts.model,
-    messages: [
-      { role: "system", content: opts.profile },
-      { role: "user", content: buildUserMessage(offer, opts.maxDescriptionChars) },
-    ],
+    input: [{ role: "user", content: [{ type: "input_text", text: input }] }],
   };
-  let res = await opts.postJson(opts.endpoint, { ...base, response_format: JSON_SCHEMA_FORMAT }, opts.apiKey, opts.sessionId);
+  let res = await opts.postJson(opts.endpoint, { ...base, text: { format: JSON_SCHEMA_FORMAT } }, opts.apiKey, opts.sessionId);
   let usedFallback = false;
-  if (res.status !== 200 && res.body.includes("response_format")) {
-    res = await opts.postJson(opts.endpoint, { ...base, response_format: JSON_OBJECT_FORMAT }, opts.apiKey, opts.sessionId);
+  if (res.status !== 200 && res.body.includes("text.format")) {
+    res = await opts.postJson(opts.endpoint, base, opts.apiKey, opts.sessionId);
     usedFallback = true;
   }
   if (res.status !== 200) throw new Error(`API error ${res.status}: ${res.body.slice(0, 200)}`);
