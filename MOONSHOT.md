@@ -114,7 +114,7 @@ one branch at a time with `bun test && bun run typecheck && bun run web:build` a
 
 | # | Phase | Workers (branch from `moonshot`) | Status |
 |---|---|---|---|
-| 1 | Ground truth: eval harness + triage mode | `ms1-eval`, `ms1-triage` | planned |
+| 1 | Ground truth: eval harness + triage mode | `ms1-eval`, `ms1-triage` | ✅ merged: `bun run eval [--replay]`, Triáž tab |
 | 2 | Learning loop: profile proposals with measured delta | `ms2-tune-api`, `ms2-tune-ui` | planned |
 | 3 | Market intelligence + morning digest | `ms3-market-api`, `ms3-market-ui`, `ms3-digest` | planned |
 | 4 | Application copilot: facts, fact-checked drafts, pipeline | `ms4-copilot-api`, `ms4-copilot-ui` | planned |
