@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import type { CSSProperties } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchApplications, removeApplication, saveApplication } from "./api";
 import { DraftPanel } from "./DraftPanel";
 import { formatDate, formatDateTime, formatSalary, toDateInput, WORKPLACE_LABELS } from "./format";
@@ -98,21 +98,28 @@ interface OfferRowProps {
   offer: OfferRow;
   selected: boolean;
   pending: boolean;
+  copilotReady: boolean;
+  application: Application | null;
   onSelect: (id: number) => void;
   onFeedback: (offer: OfferRow, verdict: Verdict) => void;
+  onApplication: (offerId: number, application: Application | null) => void;
   onError: (message: string) => void;
   onMissingFacts: () => void;
 }
 
 /**
- * Stage control + draft toggle per offer card. The application map loads
- * once per tab render (404 → all controls hidden until the backend lands).
+ * Stage control + draft toggle per offer card. The applications map is fetched
+ * once per tab in OffersView; `ready` is false until it loads (and stays false
+ * when the backend is absent), which hides the controls.
  */
 function OfferCopilot({
   offerId,
   offerTitle,
   offerUrl,
   pendingOffer,
+  ready,
+  application: current,
+  onApplication,
   onError,
   onMissingFacts,
 }: {
@@ -120,51 +127,39 @@ function OfferCopilot({
   offerTitle: string;
   offerUrl: string;
   pendingOffer: boolean;
+  ready: boolean;
+  application: Application | null;
+  onApplication: (offerId: number, application: Application | null) => void;
   onError: (message: string) => void;
   onMissingFacts: () => void;
 }) {
-  const [stages, setStages] = useState<Map<number, Application> | null>(null);
   const [saving, setSaving] = useState(false);
   const [nextAction, setNextAction] = useState("");
   const [draftOpen, setDraftOpen] = useState(false);
-  const loaded = stages !== null;
-  const current = stages?.get(offerId) ?? null;
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchApplications(controller.signal)
-      .then((data) => {
-        if (!controller.signal.aborted) setStages(new Map((data ?? []).map((row) => [row.offerId, row])));
-      })
-      .catch(() => {
-        // 404 until the backend worker lands: hide the stage controls.
-        if (!controller.signal.aborted) setStages(new Map());
-      });
-    return () => controller.abort();
-  }, []);
 
   useEffect(() => {
     setNextAction(current?.nextActionAt?.slice(0, 10) ?? "");
   }, [current?.nextActionAt]);
 
-  if (!loaded || stages.size === 0) return null;
+  if (!ready) return null;
+
+  const reportFailure = (cause: unknown) =>
+    onError(`Uložení přihlášky selhalo: ${cause instanceof Error ? cause.message : String(cause)}`);
 
   const saveStage = async (stage: AppStage | null) => {
     setSaving(true);
     try {
       if (stage === null) {
         await removeApplication(offerId);
-        setStages((prev) => {
-          const next = new Map(prev ?? []);
-          next.delete(offerId);
-          return next;
-        });
+        onApplication(offerId, null);
         setNextAction("");
         return;
       }
       const updated = await saveApplication(offerId, { stage });
-      setStages((prev) => new Map(prev ?? []).set(offerId, updated));
+      onApplication(offerId, updated);
       setNextAction(updated.nextActionAt?.slice(0, 10) ?? "");
+    } catch (cause) {
+      reportFailure(cause);
     } finally {
       setSaving(false);
     }
@@ -176,7 +171,10 @@ function OfferCopilot({
     setSaving(true);
     try {
       const updated = await saveApplication(offerId, { stage: current.stage, nextActionAt: value === "" ? null : value });
-      setStages((prev) => new Map(prev ?? []).set(offerId, updated));
+      onApplication(offerId, updated);
+    } catch (cause) {
+      setNextAction(current.nextActionAt?.slice(0, 10) ?? "");
+      reportFailure(cause);
     } finally {
       setSaving(false);
     }
@@ -216,7 +214,7 @@ function OfferCopilot({
   );
 }
 
-function OfferItem({ offer, selected, pending, onSelect, onFeedback, onError, onMissingFacts }: OfferRowProps) {
+function OfferItem({ offer, selected, pending, copilotReady, application, onSelect, onFeedback, onApplication, onError, onMissingFacts }: OfferRowProps) {
   const salary = formatSalary(offer);
   const score = offer.score;
   const verdictTag = offer.feedback ? VERDICT_TAGS[offer.feedback.verdict] : undefined;
@@ -291,11 +289,20 @@ function OfferItem({ offer, selected, pending, onSelect, onFeedback, onError, on
           </ul>
         )}
 
+        {offer.feedback?.reason != null && offer.feedback.reason.length > 0 && (
+          <p className="text-sm text-muted"><span className={`${tag} mr-[1ch] text-faint`}>poznámka</span><span className={note}>{offer.feedback.reason}</span></p>
+        )}
+
+        <FeedbackButtons active={offer.feedback?.verdict} pending={pending} itemLabel={offer.title} onFeedback={(verdict) => onFeedback(offer, verdict)} />
+
         <OfferCopilot
           offerId={offer.id}
           offerTitle={offer.title}
           offerUrl={offer.url}
           pendingOffer={pending}
+          ready={copilotReady}
+          application={application}
+          onApplication={onApplication}
           onError={onError}
           onMissingFacts={onMissingFacts}
         />
@@ -321,6 +328,33 @@ const isTyping = (target: EventTarget | null): boolean =>
 export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset, onError, onMissingFacts }: OffersViewProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const lastIndex = useRef(0);
+  // One applications fetch per tab; `null` map or a 404/failed fetch (backend not merged) hides the copilot controls.
+  const [applications, setApplications] = useState<Map<number, Application> | null>(null);
+  const [copilotAbsent, setCopilotAbsent] = useState(false);
+  const copilotReady = applications !== null && !copilotAbsent;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchApplications(controller.signal)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        if (data === null) setCopilotAbsent(true);
+        else setApplications(new Map(data.map((row) => [row.offerId, row])));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCopilotAbsent(true);
+      });
+    return () => controller.abort();
+  }, []);
+
+  const setApplication = useCallback((offerId: number, application: Application | null) => {
+    setApplications((prev) => {
+      const next = new Map(prev ?? []);
+      if (application === null) next.delete(offerId);
+      else next.set(offerId, application);
+      return next;
+    });
+  }, []);
 
   const selectedIndex = offers.findIndex((offer) => offer.id === selectedId);
   if (selectedIndex >= 0) lastIndex.current = selectedIndex;
@@ -382,8 +416,11 @@ export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset
               offer={offer}
               selected={offer.id === selectedId}
               pending={pendingId === offer.id}
+              copilotReady={copilotReady}
+              application={applications?.get(offer.id) ?? null}
               onSelect={setSelectedId}
               onFeedback={onFeedback}
+              onApplication={setApplication}
               onError={onError}
               onMissingFacts={onMissingFacts}
             />
