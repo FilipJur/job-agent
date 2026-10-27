@@ -1,12 +1,10 @@
+import { readAgencySeeds } from "../agencies/seeds";
 import { openDb } from "../db";
 import { seedAgencies } from "../repo";
-import type { AgencySeed } from "../types";
-import seed from "../../config/agencies.json";
 
 const db = openDb(process.env.DB_PATH || "data/jobs.db");
 try {
-  const items: AgencySeed[] = seed;
-  const { inserted, updated, skipped } = seedAgencies(db, items);
+  const { inserted, updated, skipped } = seedAgencies(db, readAgencySeeds());
   console.log(`agencies: inserted ${inserted}, updated ${updated}, skipped ${skipped}`);
 } finally {
   db.close();

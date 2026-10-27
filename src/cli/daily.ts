@@ -1,11 +1,10 @@
 import { parseArgs } from "node:util";
 import { crawlAgency, isCrawlDue } from "../agencies/crawl";
+import { readAgencySeeds } from "../agencies/seeds";
 import type { JudgeOptions } from "../agencies/judge";
 import { createHttpClient } from "../collectors/jobscz/http";
 import { openDb } from "../db";
 import { listAgencies, saveAgencyCrawl, seedAgencies } from "../repo";
-import type { AgencySeed } from "../types";
-import agencySeeds from "../../config/agencies.json";
 import { createCachedFetch, type HttpMode } from "../http-cache";
 import { loadScoringConfig, secondModel } from "../scoring/config";
 import { runScoring, runSecondOpinion } from "../scoring/run";
@@ -48,7 +47,7 @@ async function main(argv: string[]): Promise<void> {
   const db = openDb(process.env.DB_PATH || "data/jobs.db");
   try {
     // Idempotent: a fresh host gets its agencies, an updated checkout refreshes research fields.
-    const seeded = seedAgencies(db, agencySeeds as AgencySeed[]);
+    const seeded = seedAgencies(db, readAgencySeeds());
     if (seeded.inserted + seeded.updated > 0) console.log(`agencies: inserted ${seeded.inserted}, updated ${seeded.updated}`);
     // Agency website crawl (7-day rule). A failure is printed, never fails the run.
     try {
