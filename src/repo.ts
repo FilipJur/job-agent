@@ -6,7 +6,11 @@ import type {
   AgencyRow,
   AgencySeed,
   AgencyStatus,
+  AppStage,
+  Application,
+  ApplicationPatch,
   AspirationRow,
+  Draft,
   FeedbackVerdict,
   OfferFeedback,
   OfferRow,
@@ -515,4 +519,149 @@ export function seedAgencies(db: Database, items: AgencySeed[]): { inserted: num
     }
   })();
   return { inserted, updated, skipped };
+}
+
+/** Application stages in display order; also the sort order of the pipeline list. */
+export const APP_STAGES: readonly AppStage[] = ["drafting", "applied", "interview", "offer", "rejected", "withdrawn"];
+
+const WEEK_MS = 7 * 24 * 3600 * 1000;
+
+const APPLICATION_COLS = `a.offer_id, a.stage, a.applied_at, a.next_action_at, a.notes, a.updated_at,
+  o.title, o.company, o.url, o.source, s.score`;
+
+interface ApplicationRow {
+  offer_id: number;
+  stage: AppStage;
+  applied_at: string | null;
+  next_action_at: string | null;
+  notes: string | null;
+  updated_at: string;
+  title: string;
+  company: string | null;
+  url: string;
+  source: string;
+  score: number | null;
+}
+
+function toApplication(r: ApplicationRow): Application {
+  return {
+    offerId: r.offer_id,
+    stage: r.stage,
+    appliedAt: r.applied_at,
+    nextActionAt: r.next_action_at,
+    notes: r.notes,
+    updatedAt: r.updated_at,
+    title: r.title,
+    company: r.company,
+    url: r.url,
+    source: r.source,
+    score: r.score,
+  };
+}
+
+/** Follow-up list: stage order, then the nearest next action (no date last), then id. */
+export function listApplications(db: Database): Application[] {
+  return db
+    .query<ApplicationRow, []>(
+      `SELECT ${APPLICATION_COLS}
+      FROM applications a
+      JOIN offers o ON o.id = a.offer_id
+      ${LATEST_SCORE_JOIN}
+      ORDER BY CASE a.stage ${APP_STAGES.map((s, i) => `WHEN '${s}' THEN ${i}`).join(" ")} END,
+        (a.next_action_at IS NULL), a.next_action_at, a.offer_id`,
+    )
+    .all()
+    .map(toApplication);
+}
+
+function getApplication(db: Database, offerId: number): Application | null {
+  const row = db
+    .query<ApplicationRow, [number]>(
+      `SELECT ${APPLICATION_COLS}
+      FROM applications a
+      JOIN offers o ON o.id = a.offer_id
+      ${LATEST_SCORE_JOIN}
+      WHERE a.offer_id = ?`,
+    )
+    .get(offerId);
+  return row === null ? null : toApplication(row);
+}
+
+/**
+ * Upserts one offer's application. The first move to `applied` stamps `applied_at`
+ * (and a follow-up in a week when none is given); later moves keep it.
+ * Throws on an unknown offer (foreign key).
+ */
+export function upsertApplication(
+  db: Database,
+  offerId: number,
+  patch: ApplicationPatch,
+  now: Date = new Date(),
+): Application {
+  const current = getApplication(db, offerId);
+  const firstApplied = patch.stage === "applied" && current?.appliedAt == null;
+  const appliedAt = firstApplied ? now.toISOString() : (current?.appliedAt ?? null);
+  let nextActionAt = patch.nextActionAt === undefined ? (current?.nextActionAt ?? null) : patch.nextActionAt;
+  if (firstApplied && patch.nextActionAt === undefined) nextActionAt = new Date(now.getTime() + WEEK_MS).toISOString();
+  const notes = patch.notes === undefined ? (current?.notes ?? null) : patch.notes;
+  db.prepare(
+    `INSERT INTO applications (offer_id, stage, applied_at, next_action_at, notes, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (offer_id) DO UPDATE SET
+       stage = excluded.stage, applied_at = excluded.applied_at,
+       next_action_at = excluded.next_action_at, notes = excluded.notes, updated_at = excluded.updated_at`,
+  ).run(offerId, patch.stage, appliedAt, nextActionAt, notes, now.toISOString());
+  const saved = getApplication(db, offerId);
+  if (saved === null) throw new Error(`offer ${offerId} not found`);
+  return saved;
+}
+
+export function deleteApplication(db: Database, offerId: number): void {
+  db.prepare("DELETE FROM applications WHERE offer_id = ?").run(offerId);
+}
+
+/** The offer fields the drafting prompt needs; null when the offer does not exist. */
+export function draftOffer(db: Database, id: number): OfferToScore | null {
+  const row = db
+    .query<
+      { id: number; title: string; company: string | null; location_text: string | null; city: string | null; workplace: Workplace; description: string },
+      [number]
+    >("SELECT id, title, company, location_text, city, workplace, description FROM offers WHERE id = ?")
+    .get(id);
+  if (row === null) return null;
+  return {
+    id: row.id,
+    title: row.title,
+    company: row.company,
+    locationText: row.location_text,
+    city: row.city,
+    workplace: row.workplace,
+    description: row.description,
+    labels: labelsByOffer(db, [id]).get(id) ?? [],
+  };
+}
+
+export function saveDraft(db: Database, draft: Draft): void {
+  db.prepare("INSERT INTO drafts (offer_id, created_at, model, language, json) VALUES (?, ?, ?, ?, ?)").run(
+    draft.offerId,
+    draft.createdAt,
+    draft.model,
+    draft.language,
+    JSON.stringify(draft),
+  );
+}
+
+/** The newest draft for an offer, or null when none was generated yet. */
+export function latestDraft(db: Database, offerId: number): Draft | null {
+  const row = db
+    .query<{ json: string }, [number]>(
+      "SELECT json FROM drafts WHERE offer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1",
+    )
+    .get(offerId);
+  if (row === null) return null;
+  try {
+    return JSON.parse(row.json) as Draft;
+  } catch {
+    return null;
+  }
 }

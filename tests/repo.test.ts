@@ -1,7 +1,14 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { openDb } from "../src/db";
-import { countOffersToScore, listAgencies, listAspirations, listOffers, offersToScore, saveAgencyCrawl, saveFeedback, saveScore, seedAgencies, triageQueue, updateAgency } from "../src/repo";
+import {
+  countOffersToScore,
+  deleteApplication,
+  listApplications,
+  listAgencies, listAspirations, listOffers, offersToScore, saveAgencyCrawl, saveFeedback, saveScore, seedAgencies, triageQueue,
+  updateAgency,
+  upsertApplication,
+} from "../src/repo";
 
 let db: Database;
 let seq = 0;
@@ -316,5 +323,59 @@ describe("triageQueue", () => {
     expect(queue.offers[0]!.excerpt.length).toBeLessThanOrEqual(700);
     expect(queue.offers[0]!.excerpt).not.toContain("\n");
     expect(queue.offers[0]!.excerpt).not.toContain("  ");
+  });
+});
+
+describe("applications", () => {
+  const NOW = new Date("2026-10-27T09:00:00.000Z");
+
+  test("the first move to applied stamps the date and a one-week follow-up; later moves keep it", () => {
+    const id = offer();
+    const drafting = upsertApplication(db, id, { stage: "drafting" }, NOW);
+    expect(drafting).toMatchObject({ stage: "drafting", appliedAt: null, nextActionAt: null });
+
+    const applied = upsertApplication(db, id, { stage: "applied", notes: "posláno" }, NOW);
+    expect(applied).toMatchObject({
+      stage: "applied",
+      appliedAt: "2026-10-27T09:00:00.000Z",
+      nextActionAt: "2026-11-03T09:00:00.000Z",
+      notes: "posláno",
+    });
+
+    const later = new Date("2026-10-30T09:00:00.000Z");
+    const interview = upsertApplication(db, id, { stage: "interview" }, later);
+    expect(interview).toMatchObject({ stage: "interview", appliedAt: "2026-10-27T09:00:00.000Z" });
+
+    expect(upsertApplication(db, id, { stage: "rejected", nextActionAt: null }, later).nextActionAt).toBeNull();
+  });
+
+  test("the stage CHECK rejects values outside the pipeline", () => {
+    const id = offer();
+    expect(() =>
+      db.run("INSERT INTO applications (offer_id, stage, updated_at) VALUES (?, 'sent', 't')", [id]),
+    ).toThrow();
+  });
+
+  test("the list runs in stage order, then by next action with empty dates last", () => {
+    const drafting = offer();
+    const appliedLate = offer();
+    const appliedSoon = offer();
+    const interview = offer();
+    const withdrawn = offer();
+    const appliedNoDate = offer();
+    upsertApplication(db, appliedNoDate, { stage: "applied", nextActionAt: null }, NOW);
+    upsertApplication(db, appliedLate, { stage: "applied", nextActionAt: "2026-11-05T09:00:00.000Z" }, NOW);
+    upsertApplication(db, appliedSoon, { stage: "applied", nextActionAt: "2026-11-01T09:00:00.000Z" }, NOW);
+    upsertApplication(db, interview, { stage: "interview" }, NOW);
+    upsertApplication(db, withdrawn, { stage: "withdrawn" }, NOW);
+    upsertApplication(db, drafting, { stage: "drafting" }, NOW);
+    scored(appliedSoon, 8, "2026-10-26T11:00:00.000Z");
+
+    const list = listApplications(db);
+    expect(list.map((a) => a.offerId)).toEqual([drafting, appliedSoon, appliedLate, appliedNoDate, interview, withdrawn]);
+    expect(list[1]).toMatchObject({ score: 8, title: `Offer ${appliedSoon}`, source: "t" });
+
+    deleteApplication(db, appliedSoon);
+    expect(listApplications(db).map((a) => a.offerId)).not.toContain(appliedSoon);
   });
 });
