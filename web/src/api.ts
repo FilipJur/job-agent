@@ -1,4 +1,4 @@
-import type { AgencyPatch, AgencyRow, AspirationRow, EvalSummary, OfferRow, Proposal, Tab, TriageQueue, Verdict } from "./types";
+import type { AgencyPatch, AgencyRow, AspirationRow, EvalSummary, MarketReport, OfferRow, Proposal, Tab, TriageQueue, Verdict } from "./types";
 
 export interface OfferFilters {
   onlyNew: boolean;
@@ -75,6 +75,17 @@ export async function fetchTriage(limit: number, signal: AbortSignal): Promise<T
 
 export async function fetchAgencies(signal: AbortSignal): Promise<AgencyRow[]> {
   return request<AgencyRow[]>("/api/agencies", { signal });
+}
+
+/**
+ * Market report for the Trh tab. Returns `null` when the backend worker is
+ * not merged yet (404): the view renders the "not available" message then.
+ */
+export async function fetchMarket(signal: AbortSignal): Promise<MarketReport | null> {
+  const response = await fetch("/api/market", { signal });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await errorBody(response));
+  return (await response.json()) as MarketReport;
 }
 
 export async function patchAgency(agencyId: number, patch: AgencyPatch): Promise<AgencyRow> {
