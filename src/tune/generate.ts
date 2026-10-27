@@ -1,8 +1,7 @@
 import type { Database } from "bun:sqlite";
-import { labeledOffers, labeledOffersToScore, type EvalLabel, type LabeledOffer } from "../eval/labels";
-import { computeMetrics } from "../eval/metrics";
-import { type ReplayItem, type ReplayOptions, type ReplayResult } from "../eval/replay";
-import { defaultPostJson, scoreOneOffer, type PostJson } from "../scoring/client";
+import { labeledOffers, type EvalLabel, type LabeledOffer } from "../eval/labels";
+import { replayLabeled, type ReplayOptions, type ReplayResult } from "../eval/replay";
+import { defaultPostJson, type PostJson } from "../scoring/client";
 import { proposalIdOf, saveProposal, summarize, type EvalSummary, type StoredProposal } from "./proposals";
 
 export const MIN_LABELS = 10;
@@ -103,49 +102,6 @@ function parseReply(body: string): ProposalReply {
   return { profile: r.profile, rationale: r.rationale, changes: r.changes };
 }
 
-/** Subset twin of `replayLabeled` (null ids = all offers); a partial replay throws instead of mismeasuring. */
-async function replaySubset(db: Database, opts: ReplayOptions, ids: Set<number> | null): Promise<ReplayResult> {
-  const offers = labeledOffersToScore(db).filter((o) => ids === null || ids.has(o.id));
-  const client = {
-    endpoint: opts.endpoint,
-    model: opts.model,
-    profile: opts.profile,
-    maxDescriptionChars: opts.maxDescriptionChars,
-    apiKey: opts.apiKey,
-    sessionId: opts.sessionId,
-    postJson: opts.postJson ?? defaultPostJson,
-  };
-  const results: (ReplayItem | null)[] = offers.map(() => null);
-  const failed: ReplayResult["failed"] = [];
-  let promptTokens = 0;
-  let completionTokens = 0;
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (next < offers.length) {
-      const index = next;
-      next += 1;
-      const offer = offers[index]!;
-      try {
-        const r = await scoreOneOffer(client, offer);
-        results[index] = { offerId: offer.id, label: offer.label, score: r.score, verdict: r.verdict, reason: r.reason, gaps: r.gaps };
-        promptTokens += r.promptTokens;
-        completionTokens += r.completionTokens;
-      } catch (e) {
-        failed.push({ offerId: offer.id, label: offer.label, error: e instanceof Error ? e.message : String(e) });
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(4, offers.length) }, () => worker()));
-  // A partial replay compares different offer sets; no proposal is better than a wrongly measured one.
-  if (failed.length > 0) {
-    throw new Error(`replay failed for ${failed.length} offers: ${failed[0]!.error}`);
-  }
-  const metrics = computeMetrics(
-    offers.map((o, i) => ({ offerId: o.id, label: o.label, score: results[i]?.score ?? null, verdict: results[i]?.verdict ?? null })),
-  );
-  return { items: results.filter((r): r is ReplayItem => r !== null), failed, promptTokens, completionTokens, metrics };
-}
-
 /** Proposed metric strictly below the current one; null proposed counts as worse. */
 const worse = (current: number | null, proposed: number | null): boolean =>
   current !== null && (proposed === null || proposed < current);
@@ -188,7 +144,16 @@ export async function generateProposal(db: Database, opts: GenerateOptions): Pro
   // Honest delta: with enough labels the model sees only training offers; both replays measure the hold-out.
   const holdout = pickHoldout(offers);
   const train = holdout === null ? offers : offers.filter((o) => !holdout.has(o.offerId));
-  const current = await replaySubset(db, replayOpts(opts.profile), holdout);
+  const replayIds = holdout === null ? undefined : [...holdout];
+  const measure = async (profile: string): Promise<ReplayResult> => {
+    const replay = await replayLabeled(db, { ...replayOpts(profile), offerIds: replayIds });
+    // A partial replay compares different offer sets; no proposal is better than a wrongly measured one.
+    if (replay.failed.length > 0) {
+      throw new Error(`replay failed for ${replay.failed.length} offers: ${replay.failed[0]!.error}`);
+    }
+    return replay;
+  };
+  const current = await measure(opts.profile);
 
   const request = {
     model: opts.model,
@@ -202,7 +167,7 @@ export async function generateProposal(db: Database, opts: GenerateOptions): Pro
     return { kind: "unchanged", message: "the model proposed no change to the profile", current: summarize(current.metrics) };
   }
 
-  const proposed = await replaySubset(db, replayOpts(reply.profile), holdout);
+  const proposed = await measure(reply.profile);
   const metrics = { current: summarize(current.metrics), proposed: summarize(proposed.metrics) };
   const discarded =
     worse(metrics.current.auc, metrics.proposed.auc) || worse(metrics.current.precisionAt5, metrics.proposed.precisionAt5);
