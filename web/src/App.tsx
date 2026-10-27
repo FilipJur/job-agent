@@ -1,7 +1,8 @@
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchAgencies, fetchAspirations, fetchOffers, fetchTriage, patchAgency, toggleFeedback } from "./api";
+import { fetchAgencies, fetchApplications, fetchAspirations, fetchOffers, fetchTriage, patchAgency, toggleFeedback } from "./api";
 import type { OfferFilters } from "./api";
+import { needsFollowUp, PipelineView } from "./PipelineView";
 import { AgenciesView } from "./AgenciesView";
 import { AspirationsView } from "./AspirationsView";
 import { applyFilters, MIN_SCORES, NO_CLIENT_FILTERS } from "./filters";
@@ -15,17 +16,19 @@ import { ProfileView } from "./ProfileView";
 import { TriageView } from "./TriageView";
 import type { AgencyPatch, AgencyRow, AspirationRow, OfferRow, Tab, Verdict } from "./types";
 
-type View = Tab | "triage" | "aspirace" | "agencies" | "profile" | "market";
+type View = Tab | "triage" | "pipeline" | "aspirace" | "agencies" | "profile" | "market";
 
 const TABS: { key: View; label: string; aside?: boolean }[] = [
   { key: "hpp", label: "HPP" },
   { key: "kontrakty", label: "Kontrakty" },
   { key: "triage", label: "Triáž" },
+  { key: "pipeline", label: "Pipeline" },
   { key: "agencies", label: "Agentury" },
   { key: "market", label: "Trh" },
   { key: "profile", label: "Profil" },
   { key: "aspirace", label: "Aspirace", aside: true },
 ];
+
 
 const NO_SERVER_FILTERS: OfferFilters = { onlyNew: false, remote: false, olomouc: false, hidden: false };
 
@@ -85,9 +88,14 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [pendingOffer, setPendingOffer] = useState<number | null>(null);
   const [triageRemaining, setTriageRemaining] = useState<number | null>(null);
+  const [overdue, setOverdue] = useState<number | null>(null);
   const [savingAgency, setSavingAgency] = useState<number | null>(null);
   const [reload, setReload] = useState(0);
   const showError = useCallback((message: string) => setError(message), []);
+
+  const goProfile = useCallback(() => {
+    window.location.hash = "profile";
+  }, []);
 
   useEffect(() => {
     const onHashChange = () => setView(viewFromHash());
@@ -104,7 +112,7 @@ export function App() {
   }, [clientFilters]);
 
   useEffect(() => {
-    if (view === "profile" || view === "triage" || view === "market") {
+    if (view === "profile" || view === "triage" || view === "market" || view === "pipeline") {
       setLoading(false);
       return;
     }
@@ -135,6 +143,14 @@ export function App() {
       })
       .catch(() => {
         // The tab stays usable without a count; TriageView reports its own errors.
+      });
+    fetchApplications(controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setOverdue((data ?? []).filter((row) => needsFollowUp(row)).length);
+      })
+      .catch(() => {
+        // 404 until the backend worker lands: no badge.
+        if (!controller.signal.aborted) setOverdue(null);
       });
     return () => controller.abort();
   }, [view, reload]);
@@ -182,7 +198,7 @@ export function App() {
     }
   };
 
-  const isOffers = view !== "agencies" && view !== "profile" && view !== "aspirace" && view !== "triage" && view !== "market";
+  const isOffers = view !== "agencies" && view !== "profile" && view !== "aspirace" && view !== "triage" && view !== "market" && view !== "pipeline";
 
   return (
     <MotionConfig reducedMotion="user">
@@ -208,7 +224,7 @@ export function App() {
                     transition={{ duration: 0.12, ease: "linear" }}
                   />
                 )}
-                <span className="relative">{tab.label}{tab.key === "triage" && triageRemaining !== null ? ` ${triageRemaining}` : ""}</span>
+                <span className="relative">{tab.label}{tab.key === "triage" && triageRemaining !== null ? ` ${triageRemaining}` : ""}{tab.key === "pipeline" && overdue !== null && overdue > 0 ? ` ${overdue}` : ""}</span>
               </button>
             ))}
           </nav>
@@ -262,6 +278,8 @@ export function App() {
                       pendingId={pendingOffer}
                       onFeedback={(offer, verdict) => void sendFeedback(offer.id, verdict, offer.feedback?.verdict === verdict)}
                       onReset={resetFilters}
+                      onError={showError}
+                      onMissingFacts={goProfile}
                     />
                   </>
                 )}
@@ -291,7 +309,8 @@ export function App() {
                 <AgenciesView agencies={agencies} savingId={savingAgency} onSave={saveAgency} />
               </>
             )}
-            {view === "triage" && <TriageView onError={showError} />}
+            {view === "triage" && <TriageView onError={showError} onMissingFacts={goProfile} />}
+            {view === "pipeline" && <PipelineView onError={showError} />}
             {view === "market" && <MarketView onError={showError} />}
             {view === "profile" && <ProfileView onError={showError} />}
           </motion.div>
@@ -304,7 +323,9 @@ export function App() {
             {isOffers
               ? "j/k pohyb · u d r a h verdikt · o otevřít · / hledat · esc zrušit"
               : view === "triage"
-                ? "1 hodí se · 2 nehodí se · 3 aspirace · h skrýt · s přeskočit · o otevřít · z vrátit"
+                ? "1 hodí se · 2 nehodí se · 3 aspirace · h skrýt · d návrh · s přeskočit · o otevřít · z vrátit"
+                : view === "pipeline"
+                  ? "fáze a poznámky se ukládají hned · další krok hlídá termín"
                 : view === "aspirace"
                 ? "klik na aktivní verdikt ho zruší · jiný verdikt vrátí nabídku do práce"
                 : view === "agencies"

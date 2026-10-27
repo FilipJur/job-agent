@@ -1,9 +1,12 @@
 import { AnimatePresence, motion } from "motion/react";
 import type { CSSProperties } from "react";
-import { useEffect, useRef, useState } from "react";
-import { formatDate, formatDateTime, formatSalary, WORKPLACE_LABELS } from "./format";
-import { linkButton, meta, note, tag } from "./ui";
-import type { OfferRow, Verdict } from "./types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchApplications, removeApplication, saveApplication } from "./api";
+import { DraftPanel } from "./DraftPanel";
+import { formatDate, formatDateTime, formatSalary, toDateInput, WORKPLACE_LABELS } from "./format";
+import { StageSelect } from "./PipelineView";
+import { control, fieldLabel, linkButton, meta, note, tag } from "./ui";
+import type { Application, AppStage, OfferRow, Verdict } from "./types";
 
 interface FeedbackAction {
   verdict: Verdict;
@@ -95,11 +98,123 @@ interface OfferRowProps {
   offer: OfferRow;
   selected: boolean;
   pending: boolean;
+  copilotReady: boolean;
+  application: Application | null;
   onSelect: (id: number) => void;
   onFeedback: (offer: OfferRow, verdict: Verdict) => void;
+  onApplication: (offerId: number, application: Application | null) => void;
+  onError: (message: string) => void;
+  onMissingFacts: () => void;
 }
 
-function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowProps) {
+/**
+ * Stage control + draft toggle per offer card. The applications map is fetched
+ * once per tab in OffersView; `ready` is false until it loads (and stays false
+ * when the backend is absent), which hides the controls.
+ */
+function OfferCopilot({
+  offerId,
+  offerTitle,
+  offerUrl,
+  pendingOffer,
+  ready,
+  application: current,
+  onApplication,
+  onError,
+  onMissingFacts,
+}: {
+  offerId: number;
+  offerTitle: string;
+  offerUrl: string;
+  pendingOffer: boolean;
+  ready: boolean;
+  application: Application | null;
+  onApplication: (offerId: number, application: Application | null) => void;
+  onError: (message: string) => void;
+  onMissingFacts: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [nextAction, setNextAction] = useState("");
+  const [draftOpen, setDraftOpen] = useState(false);
+
+  useEffect(() => {
+    setNextAction(current?.nextActionAt?.slice(0, 10) ?? "");
+  }, [current?.nextActionAt]);
+
+  if (!ready) return null;
+
+  const reportFailure = (cause: unknown) =>
+    onError(`Uložení přihlášky selhalo: ${cause instanceof Error ? cause.message : String(cause)}`);
+
+  const saveStage = async (stage: AppStage | null) => {
+    setSaving(true);
+    try {
+      if (stage === null) {
+        await removeApplication(offerId);
+        onApplication(offerId, null);
+        setNextAction("");
+        return;
+      }
+      const updated = await saveApplication(offerId, { stage });
+      onApplication(offerId, updated);
+      setNextAction(updated.nextActionAt?.slice(0, 10) ?? "");
+    } catch (cause) {
+      reportFailure(cause);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveNextAction = async (value: string) => {
+    setNextAction(value);
+    if (current === null || current.stage !== "applied") return;
+    setSaving(true);
+    try {
+      const updated = await saveApplication(offerId, { stage: current.stage, nextActionAt: value === "" ? null : value });
+      onApplication(offerId, updated);
+    } catch (cause) {
+      setNextAction(current.nextActionAt?.slice(0, 10) ?? "");
+      reportFailure(cause);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-1 pt-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className={fieldLabel}>přihláška</span>
+        <StageSelect value={current?.stage ?? null} pending={pendingOffer || saving} itemLabel={offerTitle} onChange={(stage) => void saveStage(stage)} />
+        {current?.stage === "applied" && (
+          <label className="flex items-center gap-2 text-xs text-muted">
+            <span className={fieldLabel}>kdy se ozvat</span>
+            <input
+              type="date"
+              className={`${control} h-7 text-xs`}
+              value={nextAction}
+              disabled={pendingOffer || saving}
+              aria-label={`Další krok pro ${offerTitle}`}
+              onChange={(event) => void saveNextAction(event.currentTarget.value)}
+            />
+          </label>
+        )}
+        <button
+          type="button"
+          className="text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal"
+          aria-expanded={draftOpen}
+          onClick={() => setDraftOpen((open) => !open)}
+        >
+          <span className="text-faint">[{draftOpen ? "–" : "+"}]</span> návrh odpovědi
+        </button>
+      </div>
+      {draftOpen && (
+        <DraftPanel offerId={offerId} offerTitle={offerTitle} offerUrl={offerUrl} onError={onError} onMissingFacts={onMissingFacts} />
+      )}
+    </div>
+  );
+}
+
+function OfferItem({ offer, selected, pending, copilotReady, application, onSelect, onFeedback, onApplication, onError, onMissingFacts }: OfferRowProps) {
   const salary = formatSalary(offer);
   const score = offer.score;
   const verdictTag = offer.feedback ? VERDICT_TAGS[offer.feedback.verdict] : undefined;
@@ -179,6 +294,18 @@ function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowP
         )}
 
         <FeedbackButtons active={offer.feedback?.verdict} pending={pending} itemLabel={offer.title} onFeedback={(verdict) => onFeedback(offer, verdict)} />
+
+        <OfferCopilot
+          offerId={offer.id}
+          offerTitle={offer.title}
+          offerUrl={offer.url}
+          pendingOffer={pending}
+          ready={copilotReady}
+          application={application}
+          onApplication={onApplication}
+          onError={onError}
+          onMissingFacts={onMissingFacts}
+        />
       </div>
     </motion.article>
   );
@@ -191,14 +318,43 @@ interface OffersViewProps {
   pendingId: number | null;
   onFeedback: (offer: OfferRow, verdict: Verdict) => void;
   onReset: () => void;
+  onError: (message: string) => void;
+  onMissingFacts: () => void;
 }
 
 const isTyping = (target: EventTarget | null): boolean =>
   target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
-export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset }: OffersViewProps) {
+export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset, onError, onMissingFacts }: OffersViewProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const lastIndex = useRef(0);
+  // One applications fetch per tab; `null` map or a 404/failed fetch (backend not merged) hides the copilot controls.
+  const [applications, setApplications] = useState<Map<number, Application> | null>(null);
+  const [copilotAbsent, setCopilotAbsent] = useState(false);
+  const copilotReady = applications !== null && !copilotAbsent;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchApplications(controller.signal)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        if (data === null) setCopilotAbsent(true);
+        else setApplications(new Map(data.map((row) => [row.offerId, row])));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCopilotAbsent(true);
+      });
+    return () => controller.abort();
+  }, []);
+
+  const setApplication = useCallback((offerId: number, application: Application | null) => {
+    setApplications((prev) => {
+      const next = new Map(prev ?? []);
+      if (application === null) next.delete(offerId);
+      else next.set(offerId, application);
+      return next;
+    });
+  }, []);
 
   const selectedIndex = offers.findIndex((offer) => offer.id === selectedId);
   if (selectedIndex >= 0) lastIndex.current = selectedIndex;
@@ -260,8 +416,13 @@ export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset
               offer={offer}
               selected={offer.id === selectedId}
               pending={pendingId === offer.id}
+              copilotReady={copilotReady}
+              application={applications?.get(offer.id) ?? null}
               onSelect={setSelectedId}
               onFeedback={onFeedback}
+              onApplication={setApplication}
+              onError={onError}
+              onMissingFacts={onMissingFacts}
             />
           ))}
         </AnimatePresence>

@@ -81,3 +81,58 @@ export interface Proposal {
   /** How the delta was measured; absent on older files (= in-sample). */
   evaluation?: { kind: "holdout" | "in-sample"; n: number };
 }
+
+export type AppStage = "drafting" | "applied" | "interview" | "offer" | "rejected" | "withdrawn";
+
+export interface Application {
+  offerId: number;
+  stage: AppStage;
+  appliedAt: string | null;
+  nextActionAt: string | null;
+  notes: string | null;
+  updatedAt: string;
+  title: string;
+  company: string | null;
+  url: string;
+  source: string;
+  score: number | null;
+}
+
+export interface Fact {
+  id: string;
+  text: string;
+}
+
+export interface FactsStatus {
+  text: string;
+  facts: Fact[];
+}
+
+export type DraftSentenceKind = "greeting" | "claim" | "question" | "closing";
+
+export interface DraftSentence {
+  text: string;
+  kind: DraftSentenceKind;
+  facts: string[];
+}
+
+export interface Draft {
+  offerId: number;
+  createdAt: string;
+  model: string;
+  language: "cs" | "en";
+  sentences: DraftSentence[];
+  dropped: { text: string; why: string }[];
+  text: string;
+}
+
+export const STAGE_ORDER: AppStage[] = ["drafting", "applied", "interview", "offer", "rejected", "withdrawn"];
+
+export const STAGE_LABELS: Record<AppStage, string> = {
+  drafting: "rozpracováno",
+  applied: "odesláno",
+  interview: "pohovor",
+  offer: "nabídka",
+  rejected: "zamítnuto",
+  withdrawn: "staženo",
+};
