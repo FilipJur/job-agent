@@ -30,9 +30,31 @@ function offer(): number {
 }
 
 const envelope = (content: string): string =>
-  JSON.stringify({ choices: [{ message: { content } }], usage: { prompt_tokens: 10, completion_tokens: 5 } });
+  JSON.stringify({ output: [{ type: "message", content: [{ text: content }] }], usage: { input_tokens: 10, output_tokens: 5 } });
 
 const validContent = JSON.stringify({ verdict: "fit", score: 7, reason: "Dobrý fit.", gaps: "", blocker: "", direction: "", labels: ["remote-cz", "bogus"] });
+
+interface ResponsesMessage {
+  type: string;
+  content: { text: string }[];
+}
+
+function isResponsesMessage(value: unknown): value is ResponsesMessage {
+  if (typeof value !== "object" || value === null || !("type" in value) || value.type !== "message") return false;
+  if (!("content" in value) || !Array.isArray(value.content)) return false;
+  const first: unknown = value.content[0];
+  return typeof first === "object" && first !== null && "text" in first && typeof first.text === "string";
+}
+
+const textOf = (fixture: string): string => {
+  const parsed: unknown = JSON.parse(fixture);
+  if (typeof parsed !== "object" || parsed === null || !("output" in parsed) || !Array.isArray(parsed.output)) {
+    throw new Error("bad fixture");
+  }
+  const text = parsed.output.find(isResponsesMessage)?.content[0]?.text;
+  if (typeof text !== "string") throw new Error("bad fixture message");
+  return text;
+};
 
 function sequenced(bodies: string[]): PostJson {
   let i = 0;
@@ -67,13 +89,8 @@ const llmLabelsOf = (id: number) =>
 
 describe("scoring", () => {
   test("recorded live response stores the score row and llm labels", async () => {
-    const fixture = readFileSync(new URL("./fixtures/scoring/chat-completion.json", import.meta.url), "utf8");
-    const expected = JSON.parse(JSON.parse(fixture).choices[0].message.content as string) as {
-      score: number;
-      reason: string;
-      gaps: string;
-      labels: string[];
-    };
+    const fixture = readFileSync(new URL("./fixtures/scoring/response.json", import.meta.url), "utf8");
+    const expected = JSON.parse(textOf(fixture)) as { score: number; reason: string; gaps: string; labels: string[] };
     const id = offer();
     const { summary, exitCode } = await runScoring(
       db,

@@ -37,7 +37,7 @@ collectors (deterministic) → normalize → dedup → rule labels → LLM score
   - place: `olomouc`, `okoli-olomouce`, `praha`, `remote-cz`, `remote-eu`
   - content: `ai-first`, `react-ts`, `wordpress`
   - flag: `excluded`
-- **Scoring**: cheap model via OpenCode Go (OpenAI-compatible, `muse-spark-1.3-contributor`), JSON-schema output: score 0–10, one-line reason, what the candidate lacks. Model choice is decided by agreement with his labels, not by guess.
+- **Scoring**: cheap model via OpenCode Go Responses API (`muse-spark-1.3-contributor`), JSON-schema output: score 0–10, one-line reason, what the candidate lacks. Model choice is decided by agreement with his labels, not by guess.
 - **Agencies**: separate entity (contact, pipeline status, notes, last contact). Offers posted by an agency link to it. Refreshed monthly, not daily.
 - **Feedback**: 👍/👎 + reason per offer; weekly proposal to update `profile.md`, applied only after his approval.
 
