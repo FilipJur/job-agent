@@ -81,6 +81,41 @@ interface OfferQueryRow {
   feedback_reason: string | null;
   feedback_at: string | null;
 }
+function toOfferRow(r: OfferQueryRow, labels: string[]): OfferRow {
+  return {
+    id: r.id,
+    source: r.source,
+    url: r.url,
+    title: r.title,
+    company: r.company,
+    city: r.city,
+    workplace: r.workplace,
+    salaryMin: r.salary_min,
+    salaryMax: r.salary_max,
+    currency: r.currency,
+    publishedAt: r.published_at,
+    firstSeenAt: r.first_seen_at,
+    partial: r.partial === 1,
+    labels,
+    score:
+      r.score === null
+        ? null
+        : {
+            score: r.score,
+            reason: r.reason ?? "",
+            gaps: r.gaps ?? "",
+            model: r.model ?? "",
+            scoredAt: r.scored_at ?? "",
+            verdict: r.score_verdict ?? "fit",
+            blocker: r.blocker ?? "",
+            direction: r.direction ?? "",
+          },
+    feedback:
+      r.verdict === null || r.verdict === "cleared"
+        ? null
+        : { verdict: r.verdict, reason: r.feedback_reason, createdAt: r.feedback_at ?? "" },
+  };
+}
 
 /** Offers for one UI tab: score desc, unscored last, then newest first. */
 export function listOffers(db: Database, q: ListOffersQuery): OfferRow[] {
@@ -115,39 +150,66 @@ export function listOffers(db: Database, q: ListOffersQuery): OfferRow[] {
     )
     .all();
   const labels = labelsByOffer(db, rows.map((r) => r.id));
-  return rows.map((r) => ({
-    id: r.id,
-    source: r.source,
-    url: r.url,
-    title: r.title,
-    company: r.company,
-    city: r.city,
-    workplace: r.workplace,
-    salaryMin: r.salary_min,
-    salaryMax: r.salary_max,
-    currency: r.currency,
-    publishedAt: r.published_at,
-    firstSeenAt: r.first_seen_at,
-    partial: r.partial === 1,
-    labels: labels.get(r.id) ?? [],
-    score:
-      r.score === null
-        ? null
-        : {
-            score: r.score,
-            reason: r.reason ?? "",
-            gaps: r.gaps ?? "",
-            model: r.model ?? "",
-            scoredAt: r.scored_at ?? "",
-            verdict: r.score_verdict ?? "fit",
-            blocker: r.blocker ?? "",
-            direction: r.direction ?? "",
-          },
-    feedback:
-      r.verdict === null || r.verdict === "cleared"
-        ? null
-        : { verdict: r.verdict, reason: r.feedback_reason, createdAt: r.feedback_at ?? "" },
-  }));
+  return rows.map((r) => toOfferRow(r, labels.get(r.id) ?? []));
+}
+
+export interface TriageOffer extends OfferRow {
+  excerpt: string;
+}
+
+export interface TriageQueue {
+  offers: TriageOffer[];
+  labeled: number;
+  remaining: number;
+}
+
+export interface TriageQueueQuery {
+  limit?: number;
+}
+
+/** First 700 chars of the description, whitespace collapsed, for the triage card. */
+export function excerptOf(description: string): string {
+  return description.replace(/\s+/g, " ").trim().slice(0, 700);
+}
+
+/**
+ * Triage queue: offers with no current user verdict (a `cleared` verdict counts as
+ * unlabeled) and without the `excluded` label. Scored offers closest to the decision
+ * boundary (score 5) come first, unscored last, ties newest first.
+ */
+export function triageQueue(db: Database, q: TriageQueueQuery = {}): TriageQueue {
+  const where = `${NOT_EXCLUDED} AND ${NO_USER_VERDICT}`;
+  const remaining = db
+    .query<{ n: number }, []>(
+      `SELECT COUNT(*) AS n FROM offers o ${LATEST_SCORE_JOIN} ${LATEST_FEEDBACK_JOIN} WHERE ${where}`,
+    )
+    .get()!.n;
+  const labeled = db
+    .query<{ n: number }, []>(
+      `SELECT COUNT(*) AS n FROM offers o ${LATEST_FEEDBACK_JOIN} WHERE ${NOT_EXCLUDED} AND NOT ${NO_USER_VERDICT}`,
+    )
+    .get()!.n;
+  type Row = OfferQueryRow & { description: string };
+  const rows = db
+    .query<Row, [number]>(
+      `SELECT o.id, o.source, o.url, o.title, o.company, o.city, o.workplace,
+        o.salary_min, o.salary_max, o.currency, o.published_at, o.first_seen_at, o.partial, o.description,
+        s.score, s.reason, s.gaps, s.model, s.scored_at, s.verdict AS score_verdict, s.blocker, s.direction,
+        f.verdict, f.reason AS feedback_reason, f.created_at AS feedback_at
+      FROM offers o
+      ${LATEST_SCORE_JOIN}
+      ${LATEST_FEEDBACK_JOIN}
+      WHERE ${where}
+      ORDER BY (s.score IS NULL), ABS(s.score - 5), o.first_seen_at DESC, o.id DESC
+      LIMIT ?`,
+    )
+    .all(q.limit ?? -1);
+  const labels = labelsByOffer(db, rows.map((r) => r.id));
+  return {
+    offers: rows.map((r) => ({ ...toOfferRow(r, labels.get(r.id) ?? []), excerpt: excerptOf(r.description) })),
+    labeled,
+    remaining,
+  };
 }
 
 interface ScoreQueryRow {

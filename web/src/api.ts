@@ -1,4 +1,4 @@
-import type { AgencyPatch, AgencyRow, AspirationRow, OfferRow, Tab, Verdict } from "./types";
+import type { AgencyPatch, AgencyRow, AspirationRow, OfferRow, Tab, TriageQueue, Verdict } from "./types";
 
 export interface OfferFilters {
   onlyNew: boolean;
@@ -57,7 +57,21 @@ export async function toggleFeedback(offerId: number, verdict: Verdict, active: 
   return verdict;
 }
 
+export async function sendVerdict(offerId: number, verdict: Verdict, reason?: string): Promise<void> {
+  await request<unknown>(`/api/offers/${offerId}/feedback`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(reason === undefined ? { verdict } : { verdict, reason }),
+  });
+}
 
+export async function clearVerdict(offerId: number): Promise<void> {
+  await request<unknown>(`/api/offers/${offerId}/feedback`, { method: "DELETE" });
+}
+
+export async function fetchTriage(limit: number, signal: AbortSignal): Promise<TriageQueue> {
+  return request<TriageQueue>(`/api/triage?limit=${limit}`, { signal });
+}
 
 export async function fetchAgencies(signal: AbortSignal): Promise<AgencyRow[]> {
   return request<AgencyRow[]>("/api/agencies", { signal });
