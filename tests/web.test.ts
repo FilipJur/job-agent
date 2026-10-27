@@ -75,6 +75,18 @@ describe("offers API", () => {
     expect(ids((await call("/api/offers?tab=hpp&hidden=1")).body)).toEqual([id]);
   });
 
+  test("feedback DELETE clears the verdict; aspiration POST moves the offer to /api/aspirations", async () => {
+    const id = offer(["hpp"]);
+    await send("POST", `/api/offers/${id}/feedback`, { verdict: "responded" });
+    expect((await call(`/api/offers/${id}/feedback`, { method: "DELETE" })).status).toBe(200);
+    expect((await call("/api/offers?tab=hpp")).body[0].feedback).toBeNull();
+    expect((await call("/api/offers/9999/feedback", { method: "DELETE" })).status).toBe(404);
+
+    await send("POST", `/api/offers/${id}/feedback`, { verdict: "aspiration" });
+    expect((await call("/api/offers?tab=hpp")).body).toHaveLength(0);
+    expect((await call("/api/aspirations")).body).toMatchObject([{ id, source: "user" }]);
+  });
+
   test("rejects bad verdicts, ids and bodies with 400", async () => {
     const id = offer(["hpp"]);
     expect((await send("POST", `/api/offers/${id}/feedback`, { verdict: "maybe" })).status).toBe(400);

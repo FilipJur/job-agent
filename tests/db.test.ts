@@ -122,4 +122,25 @@ describe("openDb on a file", () => {
     expect(migrated.query("SELECT name, contact_url FROM agencies").all()).toEqual([{ name: "A", contact_url: null }]);
     migrated.close();
   });
+
+  test("a feedback table with the old CHECK is rebuilt: rows kept, aspiration and cleared accepted", () => {
+    const oldPath = join(dir, "feedback-old.db");
+    const old = openDb(oldPath);
+    const id = insertOffer(old, "fb");
+    old.run("DROP TABLE feedback");
+    old.run("CREATE TABLE feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, offer_id INTEGER NOT NULL REFERENCES offers (id) ON DELETE CASCADE, verdict TEXT NOT NULL CHECK (verdict IN ('up', 'down', 'responded', 'hidden')), reason TEXT, created_at TEXT NOT NULL)");
+    old.run("INSERT INTO feedback (offer_id, verdict, reason, created_at) VALUES (?, 'up', 'good', 't1'), (?, 'hidden', NULL, 't2')", [id, id]);
+    expect(() => old.run("INSERT INTO feedback (offer_id, verdict, created_at) VALUES (?, 'aspiration', 't3')", [id])).toThrow();
+    old.close();
+
+    const migrated = openDb(oldPath);
+    expect(migrated.query("SELECT verdict, reason FROM feedback ORDER BY id").all()).toEqual([
+      { verdict: "up", reason: "good" },
+      { verdict: "hidden", reason: null },
+    ]);
+    migrated.run("INSERT INTO feedback (offer_id, verdict, created_at) VALUES (?, 'aspiration', 't3')", [id]);
+    migrated.run("INSERT INTO feedback (offer_id, verdict, created_at) VALUES (?, 'cleared', 't4')", [id]);
+    expect(migrated.query("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'idx_feedback_offer'").get()).toEqual({ n: 1 });
+    migrated.close();
+  });
 });
