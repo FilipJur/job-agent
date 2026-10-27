@@ -7,6 +7,7 @@
     "agencies:seed": "bun run src/cli/agencies.ts",
     "collect": "bun run src/cli/collect.ts",
     "daily": "bun run src/cli/daily.ts",
+    "eval": "bun run src/cli/eval.ts",
     "score": "bun run src/cli/score.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
