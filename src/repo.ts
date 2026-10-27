@@ -6,11 +6,17 @@ import type {
   AgencyRow,
   AgencySeed,
   AgencyStatus,
+  AppStage,
+  Application,
+  ApplicationPatch,
   AspirationRow,
+  Draft,
   FeedbackVerdict,
   OfferFeedback,
+  OfferOpinion,
   OfferRow,
   OfferToScore,
+  OpinionInput,
   ScoreInput,
   ScoreVerdict,
   Tab,
@@ -45,11 +51,14 @@ const CONTRACT_COND = "EXISTS (SELECT 1 FROM offer_labels l WHERE l.offer_id = o
 const LATEST_SCORE_JOIN = `LEFT JOIN offer_scores s ON s.offer_id = o.id AND NOT EXISTS (
     SELECT 1 FROM offer_scores s2 WHERE s2.offer_id = o.id
       AND (s2.scored_at > s.scored_at OR (s2.scored_at = s.scored_at AND s2.id > s.id)))`;
+/** Latest stored second opinion per offer; scores live in `offer_scores`, never here. */
+const LATEST_OPINION_JOIN = `LEFT JOIN offer_opinions op ON op.offer_id = o.id AND NOT EXISTS (
+    SELECT 1 FROM offer_opinions op2 WHERE op2.offer_id = o.id
+      AND (op2.scored_at > op.scored_at OR (op2.scored_at = op.scored_at AND op2.id > op.id)))`;
 /** No user verdict: either never rated, or the last row cleared the previous one. */
 const NO_USER_VERDICT = "(f.id IS NULL OR f.verdict = 'cleared')";
 /** User verdicts that keep the offer in the HPP/Kontrakty tabs no matter the model verdict. */
 const USER_IN_TABS = "f.verdict IN ('up', 'down', 'responded')";
-/** The model's fit (or no score yet) leaves the offer in the tabs. */
 const MODEL_IN_TABS = "COALESCE(s.verdict, 'fit') = 'fit'";
 const LATEST_FEEDBACK_JOIN = `LEFT JOIN feedback f ON f.offer_id = o.id AND NOT EXISTS (
     SELECT 1 FROM feedback f2 WHERE f2.offer_id = o.id
@@ -77,9 +86,63 @@ interface OfferQueryRow {
   score_verdict: ScoreVerdict | null;
   blocker: string | null;
   direction: string | null;
+  opinion_score: number | null;
+  opinion_reason: string | null;
+  opinion_gaps: string | null;
+  opinion_model: string | null;
+  opinion_hash: string | null;
+  opinion_at: string | null;
+  opinion_verdict: ScoreVerdict | null;
   verdict: FeedbackVerdict | null;
   feedback_reason: string | null;
   feedback_at: string | null;
+}
+function toOfferRow(r: OfferQueryRow, labels: string[]): OfferRow {
+  return {
+    id: r.id,
+    source: r.source,
+    url: r.url,
+    title: r.title,
+    company: r.company,
+    city: r.city,
+    workplace: r.workplace,
+    salaryMin: r.salary_min,
+    salaryMax: r.salary_max,
+    currency: r.currency,
+    publishedAt: r.published_at,
+    firstSeenAt: r.first_seen_at,
+    partial: r.partial === 1,
+    labels,
+    score:
+      r.score === null
+        ? null
+        : {
+            score: r.score,
+            reason: r.reason ?? "",
+            gaps: r.gaps ?? "",
+            model: r.model ?? "",
+            scoredAt: r.scored_at ?? "",
+            verdict: r.score_verdict ?? "fit",
+            blocker: r.blocker ?? "",
+            direction: r.direction ?? "",
+          },
+    opinion:
+      r.opinion_score === null
+        ? null
+        : {
+            score: r.opinion_score,
+            verdict: r.opinion_verdict ?? "fit",
+            reason: r.opinion_reason ?? "",
+            gaps: r.opinion_gaps ?? "",
+            model: r.opinion_model ?? "",
+            profileHash: r.opinion_hash ?? "",
+            scoredAt: r.opinion_at ?? "",
+          },
+    feedback:
+      r.verdict === null || r.verdict === "cleared"
+        ? null
+        : { verdict: r.verdict, reason: r.feedback_reason, createdAt: r.feedback_at ?? "" },
+  };
 }
 
 /** Offers for one UI tab: score desc, unscored last, then newest first. */
@@ -106,48 +169,86 @@ export function listOffers(db: Database, q: ListOffersQuery): OfferRow[] {
       `SELECT o.id, o.source, o.url, o.title, o.company, o.city, o.workplace,
         o.salary_min, o.salary_max, o.currency, o.published_at, o.first_seen_at, o.partial,
         s.score, s.reason, s.gaps, s.model, s.scored_at, s.verdict AS score_verdict, s.blocker, s.direction,
+        op.score AS opinion_score, op.reason AS opinion_reason, op.gaps AS opinion_gaps,
+        op.model AS opinion_model, op.profile_hash AS opinion_hash, op.scored_at AS opinion_at, op.verdict AS opinion_verdict,
         f.verdict, f.reason AS feedback_reason, f.created_at AS feedback_at
       FROM offers o
       ${LATEST_SCORE_JOIN}
+      ${LATEST_OPINION_JOIN}
       ${LATEST_FEEDBACK_JOIN}
       WHERE ${where.join(" AND ")}
       ORDER BY (s.score IS NULL), s.score DESC, o.first_seen_at DESC, o.id DESC`,
     )
     .all();
   const labels = labelsByOffer(db, rows.map((r) => r.id));
-  return rows.map((r) => ({
-    id: r.id,
-    source: r.source,
-    url: r.url,
-    title: r.title,
-    company: r.company,
-    city: r.city,
-    workplace: r.workplace,
-    salaryMin: r.salary_min,
-    salaryMax: r.salary_max,
-    currency: r.currency,
-    publishedAt: r.published_at,
-    firstSeenAt: r.first_seen_at,
-    partial: r.partial === 1,
-    labels: labels.get(r.id) ?? [],
-    score:
-      r.score === null
-        ? null
-        : {
-            score: r.score,
-            reason: r.reason ?? "",
-            gaps: r.gaps ?? "",
-            model: r.model ?? "",
-            scoredAt: r.scored_at ?? "",
-            verdict: r.score_verdict ?? "fit",
-            blocker: r.blocker ?? "",
-            direction: r.direction ?? "",
-          },
-    feedback:
-      r.verdict === null || r.verdict === "cleared"
-        ? null
-        : { verdict: r.verdict, reason: r.feedback_reason, createdAt: r.feedback_at ?? "" },
-  }));
+  return rows.map((r) => toOfferRow(r, labels.get(r.id) ?? []));
+}
+
+export interface TriageOffer extends OfferRow {
+  excerpt: string;
+}
+
+export interface TriageQueue {
+  offers: TriageOffer[];
+  labeled: number;
+  remaining: number;
+}
+
+export interface TriageQueueQuery {
+  limit?: number;
+}
+
+/** First 700 chars of the description, whitespace collapsed, for the triage card. */
+export function excerptOf(description: string): string {
+  return description.replace(/\s+/g, " ").trim().slice(0, 700);
+}
+
+/**
+ * Triage queue: offers with no current user verdict (a `cleared` verdict counts as
+ * unlabeled) and without the `excluded` label. Offers where the primary score and
+ * the second opinion disagree by >= 2 points come first (largest disagreement first),
+ * then scored offers closest to the decision boundary (score 5), unscored last,
+ * ties newest first.
+ */
+export function triageQueue(db: Database, q: TriageQueueQuery = {}): TriageQueue {
+  const where = `${NOT_EXCLUDED} AND ${NO_USER_VERDICT}`;
+  const remaining = db
+    .query<{ n: number }, []>(
+      `SELECT COUNT(*) AS n FROM offers o ${LATEST_SCORE_JOIN} ${LATEST_FEEDBACK_JOIN} WHERE ${where}`,
+    )
+    .get()!.n;
+  const labeled = db
+    .query<{ n: number }, []>(
+      `SELECT COUNT(*) AS n FROM offers o ${LATEST_FEEDBACK_JOIN} WHERE ${NOT_EXCLUDED} AND NOT ${NO_USER_VERDICT}`,
+    )
+    .get()!.n;
+  /** 0 when both scores exist and disagree by >= 2, else 1; NULL is fine (one group). */
+  const disagree = `(CASE WHEN s.score IS NOT NULL AND op.score IS NOT NULL AND ABS(s.score - op.score) >= 2 THEN 0 ELSE 1 END)`;
+  const disagreeBy = `(CASE WHEN s.score IS NOT NULL AND op.score IS NOT NULL AND ABS(s.score - op.score) >= 2 THEN ABS(s.score - op.score) END)`;
+  type Row = OfferQueryRow & { description: string };
+  const rows = db
+    .query<Row, [number]>(
+      `SELECT o.id, o.source, o.url, o.title, o.company, o.city, o.workplace,
+        o.salary_min, o.salary_max, o.currency, o.published_at, o.first_seen_at, o.partial, o.description,
+        s.score, s.reason, s.gaps, s.model, s.scored_at, s.verdict AS score_verdict, s.blocker, s.direction,
+        op.score AS opinion_score, op.reason AS opinion_reason, op.gaps AS opinion_gaps,
+        op.model AS opinion_model, op.profile_hash AS opinion_hash, op.scored_at AS opinion_at, op.verdict AS opinion_verdict,
+        f.verdict, f.reason AS feedback_reason, f.created_at AS feedback_at
+      FROM offers o
+      ${LATEST_SCORE_JOIN}
+      ${LATEST_OPINION_JOIN}
+      ${LATEST_FEEDBACK_JOIN}
+      WHERE ${where}
+      ORDER BY ${disagree}, ${disagreeBy} DESC, (s.score IS NULL), ABS(s.score - 5), o.first_seen_at DESC, o.id DESC
+      LIMIT ?`,
+    )
+    .all(q.limit ?? -1);
+  const labels = labelsByOffer(db, rows.map((r) => r.id));
+  return {
+    offers: rows.map((r) => ({ ...toOfferRow(r, labels.get(r.id) ?? []), excerpt: excerptOf(r.description) })),
+    labeled,
+    remaining,
+  };
 }
 
 interface ScoreQueryRow {
@@ -210,6 +311,49 @@ function labelsByOffer(db: Database, ids: number[]): Map<number, string[]> {
     else byOffer.set(row.offer_id, [row.label]);
   }
   return byOffer;
+}
+
+/** Offers missing a second opinion for this profile+model hash; newest first. */
+export function opinionsToScore(db: Database, q: OffersToScoreQuery): OfferToScore[] {
+  const rows = db
+    .query<ScoreQueryRow, [string, number]>(
+      `SELECT o.id, o.title, o.company, o.location_text, o.city, o.workplace, o.description
+      FROM offers o
+      WHERE ${NOT_EXCLUDED}
+        AND NOT EXISTS (SELECT 1 FROM offer_opinions op WHERE op.offer_id = o.id AND op.profile_hash = ?)
+      ORDER BY o.first_seen_at DESC, o.id DESC
+      LIMIT ?`,
+    )
+    .all(q.profileHash, q.limit ?? -1);
+  const labels = labelsByOffer(db, rows.map((r) => r.id));
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    company: r.company,
+    locationText: r.location_text,
+    city: r.city,
+    workplace: r.workplace,
+    description: r.description,
+    labels: labels.get(r.id) ?? [],
+  }));
+}
+
+/** Appends a second opinion. Never touches `offer_scores`; labels are the primary run's job. */
+export function saveOpinion(db: Database, o: OpinionInput): void {
+  db.prepare(
+    "INSERT INTO offer_opinions (offer_id, score, reason, gaps, model, profile_hash, verdict, scored_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(o.offerId, o.score, o.reason, o.gaps, o.model, o.profileHash, o.verdict, o.scoredAt);
+}
+
+/** Number of offers `opinionsToScore` would return for this profile hash, without a limit. */
+export function countOpinionsToScore(db: Database, profileHash: string): number {
+  return db
+    .query<{ n: number }, [string]>(
+      `SELECT COUNT(*) AS n FROM offers o
+      WHERE ${NOT_EXCLUDED}
+        AND NOT EXISTS (SELECT 1 FROM offer_opinions op WHERE op.offer_id = o.id AND op.profile_hash = ?)`,
+    )
+    .get(profileHash)!.n;
 }
 
 /** Appends a score; optional new labels are stored with origin 'llm'. */
@@ -453,4 +597,149 @@ export function seedAgencies(db: Database, items: AgencySeed[]): { inserted: num
     }
   })();
   return { inserted, updated, skipped };
+}
+
+/** Application stages in display order; also the sort order of the pipeline list. */
+export const APP_STAGES: readonly AppStage[] = ["drafting", "applied", "interview", "offer", "rejected", "withdrawn"];
+
+const WEEK_MS = 7 * 24 * 3600 * 1000;
+
+const APPLICATION_COLS = `a.offer_id, a.stage, a.applied_at, a.next_action_at, a.notes, a.updated_at,
+  o.title, o.company, o.url, o.source, s.score`;
+
+interface ApplicationRow {
+  offer_id: number;
+  stage: AppStage;
+  applied_at: string | null;
+  next_action_at: string | null;
+  notes: string | null;
+  updated_at: string;
+  title: string;
+  company: string | null;
+  url: string;
+  source: string;
+  score: number | null;
+}
+
+function toApplication(r: ApplicationRow): Application {
+  return {
+    offerId: r.offer_id,
+    stage: r.stage,
+    appliedAt: r.applied_at,
+    nextActionAt: r.next_action_at,
+    notes: r.notes,
+    updatedAt: r.updated_at,
+    title: r.title,
+    company: r.company,
+    url: r.url,
+    source: r.source,
+    score: r.score,
+  };
+}
+
+/** Follow-up list: stage order, then the nearest next action (no date last), then id. */
+export function listApplications(db: Database): Application[] {
+  return db
+    .query<ApplicationRow, []>(
+      `SELECT ${APPLICATION_COLS}
+      FROM applications a
+      JOIN offers o ON o.id = a.offer_id
+      ${LATEST_SCORE_JOIN}
+      ORDER BY CASE a.stage ${APP_STAGES.map((s, i) => `WHEN '${s}' THEN ${i}`).join(" ")} END,
+        (a.next_action_at IS NULL), a.next_action_at, a.offer_id`,
+    )
+    .all()
+    .map(toApplication);
+}
+
+function getApplication(db: Database, offerId: number): Application | null {
+  const row = db
+    .query<ApplicationRow, [number]>(
+      `SELECT ${APPLICATION_COLS}
+      FROM applications a
+      JOIN offers o ON o.id = a.offer_id
+      ${LATEST_SCORE_JOIN}
+      WHERE a.offer_id = ?`,
+    )
+    .get(offerId);
+  return row === null ? null : toApplication(row);
+}
+
+/**
+ * Upserts one offer's application. The first move to `applied` stamps `applied_at`
+ * (and a follow-up in a week when none is given); later moves keep it.
+ * Throws on an unknown offer (foreign key).
+ */
+export function upsertApplication(
+  db: Database,
+  offerId: number,
+  patch: ApplicationPatch,
+  now: Date = new Date(),
+): Application {
+  const current = getApplication(db, offerId);
+  const firstApplied = patch.stage === "applied" && current?.appliedAt == null;
+  const appliedAt = firstApplied ? now.toISOString() : (current?.appliedAt ?? null);
+  let nextActionAt = patch.nextActionAt === undefined ? (current?.nextActionAt ?? null) : patch.nextActionAt;
+  if (firstApplied && patch.nextActionAt === undefined) nextActionAt = new Date(now.getTime() + WEEK_MS).toISOString();
+  const notes = patch.notes === undefined ? (current?.notes ?? null) : patch.notes;
+  db.prepare(
+    `INSERT INTO applications (offer_id, stage, applied_at, next_action_at, notes, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (offer_id) DO UPDATE SET
+       stage = excluded.stage, applied_at = excluded.applied_at,
+       next_action_at = excluded.next_action_at, notes = excluded.notes, updated_at = excluded.updated_at`,
+  ).run(offerId, patch.stage, appliedAt, nextActionAt, notes, now.toISOString());
+  const saved = getApplication(db, offerId);
+  if (saved === null) throw new Error(`offer ${offerId} not found`);
+  return saved;
+}
+
+export function deleteApplication(db: Database, offerId: number): void {
+  db.prepare("DELETE FROM applications WHERE offer_id = ?").run(offerId);
+}
+
+/** The offer fields the drafting prompt needs; null when the offer does not exist. */
+export function draftOffer(db: Database, id: number): OfferToScore | null {
+  const row = db
+    .query<
+      { id: number; title: string; company: string | null; location_text: string | null; city: string | null; workplace: Workplace; description: string },
+      [number]
+    >("SELECT id, title, company, location_text, city, workplace, description FROM offers WHERE id = ?")
+    .get(id);
+  if (row === null) return null;
+  return {
+    id: row.id,
+    title: row.title,
+    company: row.company,
+    locationText: row.location_text,
+    city: row.city,
+    workplace: row.workplace,
+    description: row.description,
+    labels: labelsByOffer(db, [id]).get(id) ?? [],
+  };
+}
+
+export function saveDraft(db: Database, draft: Draft): void {
+  db.prepare("INSERT INTO drafts (offer_id, created_at, model, language, json) VALUES (?, ?, ?, ?, ?)").run(
+    draft.offerId,
+    draft.createdAt,
+    draft.model,
+    draft.language,
+    JSON.stringify(draft),
+  );
+}
+
+/** The newest draft for an offer, or null when none was generated yet. */
+export function latestDraft(db: Database, offerId: number): Draft | null {
+  const row = db
+    .query<{ json: string }, [number]>(
+      "SELECT json FROM drafts WHERE offer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1",
+    )
+    .get(offerId);
+  if (row === null) return null;
+  try {
+    return JSON.parse(row.json) as Draft;
+  } catch {
+    return null;
+  }
 }

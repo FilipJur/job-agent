@@ -37,7 +37,7 @@ collectors (deterministic) → normalize → dedup → rule labels → LLM score
   - place: `olomouc`, `okoli-olomouce`, `praha`, `remote-cz`, `remote-eu`
   - content: `ai-first`, `react-ts`, `wordpress`
   - flag: `excluded`
-- **Scoring**: cheap model via OpenCode Go Responses API (`muse-spark-1.3-contributor`), JSON-schema output: score 0–10, one-line reason, what the candidate lacks. Model choice is decided by agreement with his labels, not by guess.
+- **Scoring**: cheap model via OpenCode Go Responses API (`muse-spark-1.3-contributor`), JSON-schema output: score 0–10, one-line reason, what the candidate lacks. A second model (`deepseek-v4.1-flash`) stores a non-binding second opinion per offer (`offer_opinions`); model-vs-opinion disagreement ≥ 2 drives Triáž order and the evidence for model routing (Q2). Model choice is decided by agreement with his labels, not by guess.
 - **Agencies**: separate entity (contact, pipeline status, notes, last contact). Offers posted by an agency link to it. Refreshed monthly, not daily.
 - **Feedback**: 👍/👎 + reason per offer; weekly proposal to update `profile.md`, applied only after his approval.
 
@@ -78,6 +78,7 @@ Old MacBook (M1, 8 GB) at home, OrbStack + docker compose: one container for the
 - jobs.cz city search uses a 50 km radius; location comes from the offer detail.
 - Ashby: a remote role whose UTC/GMT band covers +1 or +2 (CET/CEST) counts as EU-reachable.
 - The profile belongs to the user (`data/profile.md`); agents write it only when asked; an empty profile is rejected.
+- Drafts claim only facts from data/facts.md; validation drops uncited claims; nothing is sent.
 
 ## Open questions
 - jobs.cz brand-widget offers (~42 %) expose only a short og:description; is there an allowed full-text source?

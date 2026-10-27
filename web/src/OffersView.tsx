@@ -1,9 +1,13 @@
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useIsPresent } from "motion/react";
 import type { CSSProperties } from "react";
-import { useEffect, useRef, useState } from "react";
-import { formatDate, formatDateTime, formatSalary, WORKPLACE_LABELS } from "./format";
-import { linkButton, meta, note, tag } from "./ui";
-import type { OfferRow, Verdict } from "./types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchApplicationsCached, removeApplication, saveApplication } from "./api";
+import { DraftPanel } from "./DraftPanel";
+import { formatDate, formatDateTime, formatSalary, toDateInput, WORKPLACE_LABELS } from "./format";
+import { useKeys } from "./keys";
+import { StageSelect } from "./PipelineView";
+import { control, fieldLabel, linkButton, meta, note, tag, touchTarget } from "./ui";
+import type { Application, AppStage, OfferRow, Verdict } from "./types";
 
 interface FeedbackAction {
   verdict: Verdict;
@@ -13,10 +17,10 @@ interface FeedbackAction {
 }
 
 export const ACTIONS: FeedbackAction[] = [
-  { verdict: "up", label: "hodí se", title: "Dobrá nabídka", key: "u" },
-  { verdict: "down", label: "nehodí se", title: "Špatná nabídka", key: "d" },
+  { verdict: "up", label: "hodí se", title: "Dobrá nabídka", key: "1" },
+  { verdict: "down", label: "nehodí se", title: "Špatná nabídka", key: "2" },
   { verdict: "responded", label: "odpověděl", title: "Odpověděli", key: "r" },
-  { verdict: "aspiration", label: "aspirace", title: "Přesunout do aspirací", key: "a" },
+  { verdict: "aspiration", label: "aspirace", title: "Přesunout do aspirací", key: "3" },
   { verdict: "hidden", label: "skrýt", title: "Skrýt nabídku", key: "h" },
 ];
 
@@ -49,7 +53,7 @@ export function FeedbackButtons({ active, pending, itemLabel, onFeedback }: Feed
           <button
             key={action.verdict}
             type="button"
-            className="text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal disabled:opacity-50 aria-pressed:bg-signal aria-pressed:text-bg"
+            className={`text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal disabled:opacity-50 aria-pressed:bg-signal aria-pressed:text-bg ${touchTarget}`}
             aria-pressed={isActive}
             aria-label={action.title}
             title={`${action.title} (${action.key})`}
@@ -64,10 +68,23 @@ export function FeedbackButtons({ active, pending, itemLabel, onFeedback }: Feed
   );
 }
 
+const EXIT_OFFSET: Record<Verdict | "skip", { x?: number; y?: number }> = {
+  up: { x: 24 },
+  responded: { x: 24 },
+  down: { x: -24 },
+  skip: { x: -24 },
+  aspiration: { y: -16 },
+  hidden: { y: 16 },
+};
+
+/** Where a card leaves to after a verdict: good → right, bad → left, aspiration → up, hidden → down. */
+export const exitOffset = (verdict: Verdict | "skip" | null): { x?: number; y?: number } =>
+  verdict === null ? {} : EXIT_OFFSET[verdict];
+
 const rowVariants = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { duration: 0.12 } },
-  exit: { opacity: 0, transition: { duration: 0.08 } },
+  hidden: { opacity: 0, y: 6 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.16 } },
+  exit: (verdict: Verdict | null) => ({ opacity: 0, ...exitOffset(verdict), transition: { duration: 0.14 } }),
 };
 
 /** Ten-cell gauge drawn with box characters: heavy line = score on the ramp colour, light line = dim rail. */
@@ -91,21 +108,145 @@ export function ScoreBar({ score }: { score: number | undefined }) {
   );
 }
 
+/** "druhý názor N (model)" next to the score when it differs by >= 2 points, warning colour. */
+export function SecondOpinion({ score, opinion }: { score: number; opinion: { score: number; model: string } }): React.ReactNode {
+  if (Math.abs(score - opinion.score) < 2) return null;
+  return <span className={`${tag} text-bad`}>druhý názor {opinion.score} ({opinion.model})</span>;
+}
+
 interface OfferRowProps {
   offer: OfferRow;
   selected: boolean;
   pending: boolean;
+  copilotReady: boolean;
+  application: Application | null;
+  draftOpen: boolean;
   onSelect: (id: number) => void;
   onFeedback: (offer: OfferRow, verdict: Verdict) => void;
+  onToggleDraft: (offerId: number) => void;
+  onApplication: (offerId: number, application: Application | null) => void;
+  onError: (message: string) => void;
+  onMissingFacts: () => void;
 }
 
-function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowProps) {
+/**
+ * Stage control + draft toggle per offer card. The applications map is fetched
+ * once per tab in OffersView; `ready` is false until it loads (and stays false
+ * when the backend is absent), which hides the controls.
+ */
+function OfferCopilot({
+  offerId,
+  offerTitle,
+  offerUrl,
+  pendingOffer,
+  ready,
+  application: current,
+  draftOpen,
+  onToggleDraft,
+  onApplication,
+  onError,
+  onMissingFacts,
+}: {
+  offerId: number;
+  offerTitle: string;
+  offerUrl: string;
+  pendingOffer: boolean;
+  ready: boolean;
+  application: Application | null;
+  draftOpen: boolean;
+  onToggleDraft: () => void;
+  onApplication: (offerId: number, application: Application | null) => void;
+  onError: (message: string) => void;
+  onMissingFacts: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [nextAction, setNextAction] = useState("");
+
+  useEffect(() => {
+    setNextAction(current?.nextActionAt?.slice(0, 10) ?? "");
+  }, [current?.nextActionAt]);
+
+  if (!ready) return null;
+
+  const reportFailure = (cause: unknown) =>
+    onError(`Uložení přihlášky selhalo: ${cause instanceof Error ? cause.message : String(cause)}`);
+
+  const saveStage = async (stage: AppStage | null) => {
+    setSaving(true);
+    try {
+      if (stage === null) {
+        await removeApplication(offerId);
+        onApplication(offerId, null);
+        setNextAction("");
+        return;
+      }
+      const updated = await saveApplication(offerId, { stage });
+      onApplication(offerId, updated);
+      setNextAction(updated.nextActionAt?.slice(0, 10) ?? "");
+    } catch (cause) {
+      reportFailure(cause);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveNextAction = async (value: string) => {
+    setNextAction(value);
+    if (current === null || current.stage !== "applied") return;
+    setSaving(true);
+    try {
+      const updated = await saveApplication(offerId, { stage: current.stage, nextActionAt: value === "" ? null : value });
+      onApplication(offerId, updated);
+    } catch (cause) {
+      setNextAction(current.nextActionAt?.slice(0, 10) ?? "");
+      reportFailure(cause);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-1 pt-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className={fieldLabel}>přihláška</span>
+        <StageSelect value={current?.stage ?? null} pending={pendingOffer || saving} itemLabel={offerTitle} onChange={(stage) => void saveStage(stage)} />
+        {current?.stage === "applied" && (
+          <label className="flex items-center gap-2 text-xs text-muted">
+            <span className={fieldLabel}>kdy se ozvat</span>
+            <input
+              type="date"
+              className={`${control} h-7 text-xs`}
+              value={nextAction}
+              disabled={pendingOffer || saving}
+              aria-label={`Další krok pro ${offerTitle}`}
+              onChange={(event) => void saveNextAction(event.currentTarget.value)}
+            />
+          </label>
+        )}
+        <button
+          type="button"
+          className={`text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal ${touchTarget}`}
+          aria-expanded={draftOpen}
+          title="Návrh odpovědi (d)"
+          onClick={onToggleDraft}
+        >
+          <span className="text-faint">[{draftOpen ? "–" : "+"}]</span> návrh odpovědi
+        </button>
+      </div>
+      {draftOpen && (
+        <DraftPanel offerId={offerId} offerTitle={offerTitle} offerUrl={offerUrl} onError={onError} onMissingFacts={onMissingFacts} />
+      )}
+    </div>
+  );
+}
+
+function OfferItem({ offer, selected, pending, copilotReady, application, draftOpen, onSelect, onFeedback, onToggleDraft, onApplication, onError, onMissingFacts }: OfferRowProps) {
   const salary = formatSalary(offer);
   const score = offer.score;
   const verdictTag = offer.feedback ? VERDICT_TAGS[offer.feedback.verdict] : undefined;
   return (
     <motion.article
-      className="group/row relative grid grid-cols-[2ch_1fr] gap-x-[1ch] border-b border-line py-3 pr-1 transition-colors before:text-signal before:content-[''] hover:bg-surface data-[selected=true]:bg-raised data-[selected=true]:before:content-['>']"
+      className="group/row relative grid scroll-mt-14 scroll-mb-12 grid-cols-[2ch_1fr] gap-x-[1ch] border-b border-line py-3 pr-1 transition-colors before:text-signal before:content-[''] hover:bg-surface data-[selected=true]:bg-raised data-[selected=true]:outline data-[selected=true]:-outline-offset-1 data-[selected=true]:outline-signal/60 data-[selected=true]:before:content-['>']"
       data-selected={selected}
       data-offer-id={offer.id}
       layout="position"
@@ -113,7 +254,7 @@ function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowP
       initial="hidden"
       animate="show"
       exit="exit"
-      transition={{ layout: { duration: 0.12 } }}
+      transition={{ layout: { duration: 0.15 } }}
       onClick={(event) => {
         if (!(event.target as HTMLElement).closest("a,button")) onSelect(offer.id);
       }}
@@ -121,6 +262,7 @@ function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowP
       <div className="grid min-w-0 gap-1 col-start-2">
         <div className="flex flex-wrap items-baseline gap-x-[2ch] gap-y-0.5">
           <ScoreBar score={score?.score} />
+          {score !== null && offer.opinion !== null && <SecondOpinion score={score.score} opinion={offer.opinion} />}
           <h2 className="min-w-[20ch] flex-1 text-[1.125rem] leading-snug font-semibold text-balance">
             <a
               className="text-fg no-underline decoration-signal hover:underline"
@@ -179,6 +321,20 @@ function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowP
         )}
 
         <FeedbackButtons active={offer.feedback?.verdict} pending={pending} itemLabel={offer.title} onFeedback={(verdict) => onFeedback(offer, verdict)} />
+
+        <OfferCopilot
+          offerId={offer.id}
+          offerTitle={offer.title}
+          offerUrl={offer.url}
+          pendingOffer={pending}
+          ready={copilotReady}
+          application={application}
+          draftOpen={draftOpen}
+          onToggleDraft={() => onToggleDraft(offer.id)}
+          onApplication={onApplication}
+          onError={onError}
+          onMissingFacts={onMissingFacts}
+        />
       </div>
     </motion.article>
   );
@@ -191,14 +347,42 @@ interface OffersViewProps {
   pendingId: number | null;
   onFeedback: (offer: OfferRow, verdict: Verdict) => void;
   onReset: () => void;
+  onError: (message: string) => void;
+  onMissingFacts: () => void;
 }
 
-const isTyping = (target: EventTarget | null): boolean =>
-  target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
-
-export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset }: OffersViewProps) {
+export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset, onError, onMissingFacts }: OffersViewProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const lastIndex = useRef(0);
+  // One applications fetch per tab; `null` map or a 404/failed fetch (backend not merged) hides the copilot controls.
+  const [applications, setApplications] = useState<Map<number, Application> | null>(null);
+  const [copilotAbsent, setCopilotAbsent] = useState(false);
+  const [draftOpenIds, setDraftOpenIds] = useState<ReadonlySet<number>>(new Set());
+  const [lastVerdict, setLastVerdict] = useState<Verdict | null>(null);
+  const copilotReady = applications !== null && !copilotAbsent;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchApplicationsCached(controller.signal)
+      .then(({ data }) => {
+        if (controller.signal.aborted) return;
+        if (data === null) setCopilotAbsent(true);
+        else setApplications(new Map(data.map((row) => [row.offerId, row])));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCopilotAbsent(true);
+      });
+    return () => controller.abort();
+  }, []);
+
+  const setApplication = useCallback((offerId: number, application: Application | null) => {
+    setApplications((prev) => {
+      const next = new Map(prev ?? []);
+      if (application === null) next.delete(offerId);
+      else next.set(offerId, application);
+      return next;
+    });
+  }, []);
 
   const selectedIndex = offers.findIndex((offer) => offer.id === selectedId);
   if (selectedIndex >= 0) lastIndex.current = selectedIndex;
@@ -212,56 +396,75 @@ export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset
 
   const selectedOffer = selectedIndex >= 0 ? offers[selectedIndex] : undefined;
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key === "/" && !isTyping(event.target)) {
-        event.preventDefault();
-        document.querySelector<HTMLInputElement>("[data-search]")?.focus();
-        return;
-      }
-      if (event.key === "Escape") {
-        if (isTyping(event.target)) (event.target as HTMLElement).blur();
-        else setSelectedId(null);
-        return;
-      }
-      if (isTyping(event.target) || offers.length === 0) return;
+  const toggleDraft = useCallback((id: number) => {
+    setDraftOpenIds((open) => {
+      const next = new Set(open);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
 
-      const move = (to: number) => {
-        const next = offers[Math.max(0, Math.min(offers.length - 1, to))];
-        if (next === undefined) return;
-        setSelectedId(next.id);
-        document.querySelector(`[data-offer-id="${next.id}"]`)?.scrollIntoView({ block: "nearest" });
-      };
-      const current = selectedIndex >= 0 ? selectedIndex : -1;
-      if (event.key === "j" || event.key === "ArrowDown") {
-        event.preventDefault();
-        move(current + 1);
-      } else if (event.key === "k" || event.key === "ArrowUp") {
-        event.preventDefault();
-        move(current < 0 ? 0 : current - 1);
-      } else if (selectedOffer !== undefined && pendingId === null) {
-        const action = ACTIONS.find((candidate) => candidate.key === event.key);
-        if (action) onFeedback(selectedOffer, action.verdict);
-        else if (event.key === "o" || event.key === "Enter") window.open(selectedOffer.url, "_blank", "noopener,noreferrer");
-      }
+  const feedback = useCallback(
+    (offer: OfferRow, verdict: Verdict) => {
+      setLastVerdict(verdict);
+      onFeedback(offer, verdict);
+    },
+    [onFeedback],
+  );
+
+  const present = useIsPresent();
+  useKeys((event) => {
+    if (event.key === "/") {
+      event.preventDefault();
+      document.querySelector<HTMLInputElement>("[data-search]")?.focus();
+      return;
+    }
+    if (event.key === "Escape") {
+      setSelectedId(null);
+      return;
+    }
+    if (offers.length === 0) return;
+
+    const move = (to: number) => {
+      const next = offers[Math.max(0, Math.min(offers.length - 1, to))];
+      if (next === undefined) return;
+      setSelectedId(next.id);
+      document.querySelector(`[data-offer-id="${next.id}"]`)?.scrollIntoView({ block: "nearest" });
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [offers, selectedIndex, selectedOffer, pendingId, onFeedback]);
+    const current = selectedIndex >= 0 ? selectedIndex : -1;
+    if (event.key === "j" || event.key === "ArrowDown") {
+      event.preventDefault();
+      move(current + 1);
+    } else if (event.key === "k" || event.key === "ArrowUp") {
+      event.preventDefault();
+      move(current < 0 ? 0 : current - 1);
+    } else if (selectedOffer !== undefined && pendingId === null) {
+      const action = ACTIONS.find((candidate) => candidate.key === event.key);
+      if (action) feedback(selectedOffer, action.verdict);
+      else if (event.key === "d" && copilotReady) toggleDraft(selectedOffer.id);
+      else if (event.key === "o" || event.key === "Enter") window.open(selectedOffer.url, "_blank", "noopener,noreferrer");
+    }
+  }, present);
 
   return (
     <>
-      <div className="relative border-t border-line @container">
-        <AnimatePresence mode="popLayout" initial>
+      <div className="relative overflow-x-clip border-t border-line @container">
+        <AnimatePresence mode="popLayout" initial custom={lastVerdict}>
           {offers.map((offer) => (
             <OfferItem
               key={offer.id}
               offer={offer}
               selected={offer.id === selectedId}
               pending={pendingId === offer.id}
+              copilotReady={copilotReady}
+              application={applications?.get(offer.id) ?? null}
+              draftOpen={draftOpenIds.has(offer.id)}
               onSelect={setSelectedId}
-              onFeedback={onFeedback}
+              onFeedback={feedback}
+              onToggleDraft={toggleDraft}
+              onApplication={setApplication}
+              onError={onError}
+              onMissingFacts={onMissingFacts}
             />
           ))}
         </AnimatePresence>

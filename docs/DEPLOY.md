@@ -47,6 +47,52 @@ docker compose logs -f web
 
 The scoring profile is user data in `data/profile.md`. On first use it is created from the committed template `profile.md`. Edit it in the Profil tab or with any editor; no rebuild needed.
 
+### Profile proposals
+
+From your Triáž verdicts the system proposes a revised profile, but never changes `data/profile.md` itself. `daily` generates a proposal at most once per 7 days, and only with at least 10 labelled offers (≥ 3 up/responded and ≥ 3 down/hidden). Each proposal re-scores the labelled offers under the old and the new profile; one that lowers AUC or precision@5 is stored as `discarded`. Proposals are files in `data/proposals/`.
+
+```sh
+docker compose run --rm cli tune     # generate a proposal now, prints the metrics, old vs new
+```
+
+Applying happens only in the Profil tab (`POST /api/proposals/:id/apply`); a proposal is refused when the profile was edited after it was made.
+
+## Fakta a odpovědi
+
+`data/facts.md` je seznam ověřených faktů o tobě: každý řádek začínající `- ` je
+jeden fakt (F1, F2, … v pořadí). Na první použití se vytvoří z šablony `facts.md`.
+Uprav ho v UI (`PUT /api/facts`) nebo editorem; nic jiného se do návrhu odpovědi
+nedostane.
+
+`POST /api/offers/:id/draft` nechá model napsat odpověď na nabídku a pak ji
+deterministicky zkontroluje (`src/copilot/validate.ts`): tvrzení bez citovaného
+faktu, s neznámým faktem, s číslem, které v citovaných faktech není, nebo bez
+společného slova s nimi se zahodí a zobrazí jako `dropped`. Nic se neodesílá;
+text zkopíruješ a pošleš sám.
+
+Aplikace k nabídce (`PUT /api/offers/:id/application`) drží fázi
+drafting → applied → interview → offer / rejected / withdrawn, datum odeslání,
+další akci a poznámky. První přesun na `applied` nastaví `applied_at` a follow-up
+za 7 dní; termíny, které nastaly u `applied`/`interview`, se objeví v ranním
+přehledu v sekci Follow-upy.
+
+## Morning digest
+
+`daily` builds the digest last (`src/digest/`), after scoring: new actionable
+offers, freshly crawled agency positions, a pending profile proposal and the
+Triáž backlog count. It writes `data/digest/YYYY-MM-DD.md` and advances
+`data/digest/last.json` (the next run's `since`; 24 h back when missing).
+A failure is printed and never fails the run. Test it with:
+
+```sh
+docker compose run --rm cli digest --dry-run   # prints the markdown, writes/pushes nothing
+```
+
+Opt-in push to a notification topic you own (to yourself only): set `NTFY_URL`
+(e.g. `https://ntfy.sh/<vas-soukromy-topic>`); `JOB_AGENT_URL` (optional) makes
+the notification link back to the UI. Push failures are printed with the URL
+redacted. Never set a shared topic — the push goes only to you.
+
 ## Access
 
 - This Mac: `http://localhost:3000`

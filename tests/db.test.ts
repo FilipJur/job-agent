@@ -92,7 +92,7 @@ describe("openDb on a file", () => {
     migrated.close();
   });
 
-  test("an existing database gains offer_scores, feedback and agencies while keeping its offers", () => {
+  test("an existing database gains offer_scores, feedback, agencies, applications and drafts while keeping its offers", () => {
     const legacyPath = join(dir, "legacy.db");
     const legacy = openDb(legacyPath);
     const id = insertOffer(legacy, "kept");
@@ -100,12 +100,14 @@ describe("openDb on a file", () => {
     legacy.run("DROP TABLE offer_scores");
     legacy.run("DROP TABLE feedback");
     legacy.run("DROP TABLE agencies");
+    legacy.run("DROP TABLE applications");
+    legacy.run("DROP TABLE drafts");
     legacy.close();
 
     const migrated = openDb(legacyPath);
     expect(migrated.query("SELECT COUNT(*) AS n FROM offers").get()).toEqual({ n: 1 });
     expect(migrated.query("SELECT label FROM offer_labels").get()).toEqual({ label: "hpp" });
-    for (const table of ["offer_scores", "feedback", "agencies"]) {
+    for (const table of ["offer_scores", "feedback", "agencies", "applications", "drafts"]) {
       expect(migrated.query(`SELECT COUNT(*) AS n FROM ${table}`).get()).toEqual({ n: 0 });
     }
     migrated.close();

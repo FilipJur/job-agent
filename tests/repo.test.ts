@@ -1,7 +1,15 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { openDb } from "../src/db";
-import { countOffersToScore, listAgencies, listAspirations, listOffers, offersToScore, saveAgencyCrawl, saveFeedback, saveScore, seedAgencies, updateAgency } from "../src/repo";
+import {
+  countOffersToScore,
+  countOpinionsToScore,
+  deleteApplication,
+  listApplications,
+  listAgencies, listAspirations, listOffers, offersToScore, opinionsToScore, saveAgencyCrawl, saveFeedback, saveOpinion, saveScore, seedAgencies, triageQueue,
+  updateAgency,
+  upsertApplication,
+} from "../src/repo";
 
 let db: Database;
 let seq = 0;
@@ -271,5 +279,151 @@ describe("agencies", () => {
       notes: "n",
       lastContactAt: "2026-10-26",
     });
+  });
+});
+
+describe("triageQueue", () => {
+  test("orders scored by closeness to 5, unscored last, ties newest first", () => {
+    const far = offer({ firstSeenAt: "2026-10-26T09:00:00.000Z" });
+    const near = offer({ firstSeenAt: "2026-10-26T08:00:00.000Z" });
+    const older = offer({ firstSeenAt: "2026-10-26T07:00:00.000Z" });
+    const unscored = offer({ firstSeenAt: "2026-10-26T10:00:00.000Z" });
+    scored(far, 9, "2026-10-26T11:00:00.000Z");
+    scored(near, 6, "2026-10-26T11:00:00.000Z");
+    scored(older, 4, "2026-10-26T11:00:00.000Z");
+    const queue = triageQueue(db, {});
+    expect(queue.offers.map((o) => o.id)).toEqual([near, older, far, unscored]);
+    expect(queue.remaining).toBe(4);
+    expect(queue.labeled).toBe(0);
+  });
+
+  test("excludes excluded and labelled offers; cleared returns to the queue; counts", () => {
+    const kept = offer();
+    const hidden = offer();
+    const excluded = offer({ labels: ["excluded"] });
+    scored(kept, 5, "2026-10-26T11:00:00.000Z");
+    scored(hidden, 5, "2026-10-26T11:00:00.000Z");
+    scored(excluded, 5, "2026-10-26T11:00:00.000Z");
+    verdict(hidden, "down", "2026-10-26T12:00:00.000Z");
+    let queue = triageQueue(db, {});
+    expect(queue.offers.map((o) => o.id)).toEqual([kept]);
+    expect(queue).toMatchObject({ labeled: 1, remaining: 1 });
+
+    verdict(hidden, "cleared", "2026-10-26T13:00:00.000Z");
+    queue = triageQueue(db, {});
+    expect(queue.offers.map((o) => o.id).sort()).toEqual([kept, hidden].sort());
+    expect(queue).toMatchObject({ labeled: 0, remaining: 2 });
+  });
+
+  test("respects the limit but keeps the full remaining count; excerpt is collapsed to 700 chars", () => {
+    db.run("UPDATE offers SET description = ? WHERE id = ?", ["a\n\n  b\t\tc ".repeat(100), offer()]);
+    offer();
+    const queue = triageQueue(db, { limit: 1 });
+    expect(queue.offers).toHaveLength(1);
+    expect(queue.remaining).toBe(2);
+    expect(queue.offers[0]!.excerpt.length).toBeLessThanOrEqual(700);
+    expect(queue.offers[0]!.excerpt).not.toContain("\n");
+    expect(queue.offers[0]!.excerpt).not.toContain("  ");
+  });
+
+  test("opinions never change the latest score row; listOffers exposes both", () => {
+    const id = offer({ labels: ["hpp"] });
+    scored(id, 8, "2026-10-26T11:00:00.000Z");
+    saveOpinion(db, {
+      offerId: id,
+      score: 3,
+      verdict: "fit",
+      reason: "druhý model nesouhlasí",
+      gaps: "",
+      model: "deepseek",
+      profileHash: "p2",
+      scoredAt: "2026-10-26T12:00:00.000Z",
+    });
+    const row = listOffers(db, { tab: "hpp" }).find((o) => o.id === id)!;
+    expect(row.score?.score).toBe(8);
+    expect(row.opinion).toMatchObject({ score: 3, model: "deepseek" });
+    expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM offer_scores").get()!.n).toBe(1);
+  });
+
+  test("disagreement >= 2 comes first, then the boundary order", () => {
+    const disagreeFar = offer({ firstSeenAt: "2026-10-26T06:00:00.000Z" });
+    const disagreeNear = offer({ firstSeenAt: "2026-10-26T05:00:00.000Z" });
+    const boundary = offer({ firstSeenAt: "2026-10-26T07:00:00.000Z" });
+    scored(disagreeFar, 9, "2026-10-26T11:00:00.000Z");
+    scored(disagreeNear, 5, "2026-10-26T11:00:00.000Z");
+    scored(boundary, 6, "2026-10-26T11:00:00.000Z");
+    const opinion = (offerId: number, score: number) =>
+      saveOpinion(db, { offerId, score, verdict: "fit", reason: "r", gaps: "", model: "m2", profileHash: "p2", scoredAt: "2026-10-26T12:00:00.000Z" });
+    opinion(disagreeFar, 3); // |9-3| = 6
+    opinion(disagreeNear, 8); // |5-8| = 3
+    opinion(boundary, 7); // |6-7| = 1: stays in the boundary group
+    const queue = triageQueue(db, {});
+    expect(queue.offers.map((o) => o.id)).toEqual([disagreeFar, disagreeNear, boundary]);
+    expect(queue.offers[0]!.opinion?.score).toBe(3);
+  });
+
+  test("opinionsToScore skips offers already having an opinion for the hash", () => {
+    const a = offer();
+    const b = offer();
+    const hash = "profilehash2";
+    expect(opinionsToScore(db, { profileHash: hash }).map((o) => o.id).sort()).toEqual([a, b].sort());
+    expect(countOpinionsToScore(db, hash)).toBe(2);
+    saveOpinion(db, { offerId: a, score: 4, verdict: "fit", reason: "r", gaps: "", model: "m2", profileHash: hash, scoredAt: "2026-10-26T12:00:00.000Z" });
+    expect(opinionsToScore(db, { profileHash: hash }).map((o) => o.id)).toEqual([b]);
+    expect(countOpinionsToScore(db, hash)).toBe(1);
+  });
+});
+
+describe("applications", () => {
+  const NOW = new Date("2026-10-27T09:00:00.000Z");
+
+  test("the first move to applied stamps the date and a one-week follow-up; later moves keep it", () => {
+    const id = offer();
+    const drafting = upsertApplication(db, id, { stage: "drafting" }, NOW);
+    expect(drafting).toMatchObject({ stage: "drafting", appliedAt: null, nextActionAt: null });
+
+    const applied = upsertApplication(db, id, { stage: "applied", notes: "posláno" }, NOW);
+    expect(applied).toMatchObject({
+      stage: "applied",
+      appliedAt: "2026-10-27T09:00:00.000Z",
+      nextActionAt: "2026-11-03T09:00:00.000Z",
+      notes: "posláno",
+    });
+
+    const later = new Date("2026-10-30T09:00:00.000Z");
+    const interview = upsertApplication(db, id, { stage: "interview" }, later);
+    expect(interview).toMatchObject({ stage: "interview", appliedAt: "2026-10-27T09:00:00.000Z" });
+
+    expect(upsertApplication(db, id, { stage: "rejected", nextActionAt: null }, later).nextActionAt).toBeNull();
+  });
+
+  test("the stage CHECK rejects values outside the pipeline", () => {
+    const id = offer();
+    expect(() =>
+      db.run("INSERT INTO applications (offer_id, stage, updated_at) VALUES (?, 'sent', 't')", [id]),
+    ).toThrow();
+  });
+
+  test("the list runs in stage order, then by next action with empty dates last", () => {
+    const drafting = offer();
+    const appliedLate = offer();
+    const appliedSoon = offer();
+    const interview = offer();
+    const withdrawn = offer();
+    const appliedNoDate = offer();
+    upsertApplication(db, appliedNoDate, { stage: "applied", nextActionAt: null }, NOW);
+    upsertApplication(db, appliedLate, { stage: "applied", nextActionAt: "2026-11-05T09:00:00.000Z" }, NOW);
+    upsertApplication(db, appliedSoon, { stage: "applied", nextActionAt: "2026-11-01T09:00:00.000Z" }, NOW);
+    upsertApplication(db, interview, { stage: "interview" }, NOW);
+    upsertApplication(db, withdrawn, { stage: "withdrawn" }, NOW);
+    upsertApplication(db, drafting, { stage: "drafting" }, NOW);
+    scored(appliedSoon, 8, "2026-10-26T11:00:00.000Z");
+
+    const list = listApplications(db);
+    expect(list.map((a) => a.offerId)).toEqual([drafting, appliedSoon, appliedLate, appliedNoDate, interview, withdrawn]);
+    expect(list[1]).toMatchObject({ score: 8, title: `Offer ${appliedSoon}`, source: "t" });
+
+    deleteApplication(db, appliedSoon);
+    expect(listApplications(db).map((a) => a.offerId)).not.toContain(appliedSoon);
   });
 });

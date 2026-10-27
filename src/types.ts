@@ -78,6 +78,27 @@ export interface OfferFeedback {
 /** What the model decided about an offer: fit = actionable, blocked = unusable now, aspiration = great fit, wrong timing/place. */
 export type ScoreVerdict = "fit" | "blocked" | "aspiration";
 
+export interface OfferOpinion {
+  score: number;
+  verdict: ScoreVerdict;
+  reason: string;
+  gaps: string;
+  model: string;
+  profileHash: string;
+  scoredAt: string;
+}
+
+export interface OpinionInput {
+  offerId: number;
+  score: number;
+  verdict: ScoreVerdict;
+  reason: string;
+  gaps: string;
+  model: string;
+  profileHash: string;
+  scoredAt: string;
+}
+
 export interface OfferRow {
   id: number;
   source: string;
@@ -94,6 +115,7 @@ export interface OfferRow {
   partial: boolean;
   labels: string[];
   score: OfferScore | null;
+  opinion: OfferOpinion | null;
   feedback: OfferFeedback | null;
 }
 
@@ -162,6 +184,56 @@ export type AgencyRow = {
   createdAt: string;
   updatedAt: string;
 } & AgencyCrawl;
+
+/** Application pipeline stages, in display order. */
+export type AppStage = "drafting" | "applied" | "interview" | "offer" | "rejected" | "withdrawn";
+
+/** One offer's application state plus the offer fields the pipeline view needs. */
+export interface Application {
+  offerId: number;
+  stage: AppStage;
+  appliedAt: string | null;
+  nextActionAt: string | null;
+  notes: string | null;
+  updatedAt: string;
+  title: string;
+  company: string | null;
+  url: string;
+  source: string;
+  score: number | null;
+}
+
+/** PUT /api/offers/:id/application: `nextActionAt`/`notes` omitted keep the stored value. */
+export interface ApplicationPatch {
+  stage: AppStage;
+  nextActionAt?: string | null;
+  notes?: string | null;
+}
+
+/** One verified fact from `data/facts.md`; ids are `F1`, `F2`, … in file order. */
+export interface Fact {
+  id: string;
+  text: string;
+}
+
+export type DraftSentenceKind = "greeting" | "claim" | "question" | "closing";
+
+export interface DraftSentence {
+  text: string;
+  kind: DraftSentenceKind;
+  facts: string[];
+}
+
+/** A fact-checked reply draft; `dropped` keeps what validation removed, so the user sees it. */
+export interface Draft {
+  offerId: number;
+  createdAt: string;
+  model: string;
+  language: "cs" | "en";
+  sentences: DraftSentence[];
+  dropped: { text: string; why: string }[];
+  text: string;
+}
 
 /** Result of crawling an agency website (src/agencies/crawl.ts); all null/false until a judgment ran. */
 export interface AgencyCrawl {

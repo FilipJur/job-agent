@@ -6,10 +6,12 @@
     "agencies:crawl": "bun run src/cli/agencies-crawl.ts",
     "agencies:seed": "bun run src/cli/agencies.ts",
     "collect": "bun run src/cli/collect.ts",
-    "daily": "bun run src/cli/daily.ts",
+    "digest": "bun run src/cli/digest.ts",
+    "eval": "bun run src/cli/eval.ts",
     "score": "bun run src/cli/score.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
+    "tune": "bun run src/cli/tune.ts",
     "web": "bun run src/web/server.ts",
     "web:build": "vite build --config web/vite.config.ts",
     "web:dev": "vite --config web/vite.config.ts"

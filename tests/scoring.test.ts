@@ -3,8 +3,7 @@ import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { openDb } from "../src/db";
 import { parseScoreReply, type PostJson } from "../src/scoring/client";
-import { runScoring } from "../src/scoring/run";
-
+import { runScoring, runSecondOpinion } from "../src/scoring/run";
 let db: Database;
 let seq = 0;
 
@@ -161,5 +160,27 @@ describe("scoring", () => {
     const third = await runScoring(db, opts(fake, "profil kandidáta\nDodatek."));
     expect(third.summary).toMatchObject({ scored: 2, skipped: 0 });
     expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM offer_scores").get()?.n).toBe(4);
+  });
+});
+
+describe("second opinion", () => {
+  test("stores opinions without touching scores or labels; skips hashed offers", async () => {
+    const a = offer();
+    const b = offer();
+    let calls = 0;
+    const postJson: PostJson = async () => {
+      calls += 1;
+      return { status: 200, body: envelope(validContent) };
+    };
+    const first = await runSecondOpinion(db, opts(postJson));
+    expect(first.summary).toMatchObject({ scored: 2, failed: 0, skipped: 0 });
+    expect(calls).toBe(2);
+    expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM offer_opinions").get()?.n).toBe(2);
+    expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM offer_scores").get()?.n).toBe(0);
+    expect(llmLabelsOf(a)).toEqual([]);
+    const second = await runSecondOpinion(db, opts(postJson));
+    expect(second.summary).toMatchObject({ scored: 0, failed: 0, skipped: 2 });
+    expect(calls).toBe(2);
+    expect(b).toBeGreaterThan(0);
   });
 });
