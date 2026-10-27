@@ -118,7 +118,11 @@ one branch at a time with `bun test && bun run typecheck && bun run web:build` a
 | 2 | Learning loop: profile proposals with measured delta | `ms2-tune-api`, `ms2-tune-ui` | planned |
 | 3 | Market intelligence + morning digest | `ms3-market-api`, `ms3-market-ui`, `ms3-digest` | planned |
 | 4 | Application copilot: facts, fact-checked drafts, pipeline | `ms4-copilot-api`, `ms4-copilot-ui` | planned |
-| 5 | Entity resolution: cross-source duplicates, agency ↔ offer links | `ms5-entities` | planned |
+| 5 | Active learning: second-opinion model (deepseek flash) drives Triáž order and model routing evidence | `ms5-second-opinion` | planned |
 | 6 | Experience: PWA, keyboard, motion polish | `ms6-experience` | planned |
+
+Phase 5 re-plan: entity resolution was measured on the 2026-10-27 snapshot before building it. Only 3 companies
+appear on more than one source (all with different roles) and 0 offers match a tracked agency, so it stays in Q5
+of the 12-month plan and is not built now. Q2 "model routing by evidence" moves forward instead.
 
 Out of scope even here: sending anything, new scraping sources without robots review, multi-user, auth.
