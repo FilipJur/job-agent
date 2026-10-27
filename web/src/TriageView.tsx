@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clearVerdict, fetchTriage, sendVerdict } from "./api";
+import { DraftPanel } from "./DraftPanel";
 import { formatDate, formatDateTime, formatSalary, WORKPLACE_LABELS } from "./format";
 import { checkbox, fieldLabel, linkButton, meta, note, tag } from "./ui";
 import { ScoreBar } from "./OffersView";
@@ -44,13 +45,17 @@ interface CardProps {
   chips: string[];
   freeText: string;
   pending: boolean;
+  draftOpen: boolean;
   onToggleChip: (label: string) => void;
   onFreeText: (value: string) => void;
   onVerdict: (verdict: Verdict) => void;
   onSkip: () => void;
+  onToggleDraft: () => void;
+  onError: (message: string) => void;
+  onMissingFacts: () => void;
 }
 
-function TriageCard({ offer, chips, freeText, pending, onToggleChip, onFreeText, onVerdict, onSkip }: CardProps) {
+function TriageCard({ offer, chips, freeText, pending, draftOpen, onToggleChip, onFreeText, onVerdict, onSkip, onToggleDraft, onError, onMissingFacts }: CardProps) {
   const salary = formatSalary(offer);
   const score = offer.score;
   return (
@@ -147,6 +152,15 @@ function TriageCard({ offer, chips, freeText, pending, onToggleChip, onFreeText,
         <button
           type="button"
           className="text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal disabled:opacity-50"
+          title="Připravit odpověď (d)"
+          aria-expanded={draftOpen}
+          onClick={onToggleDraft}
+        >
+          <span className="text-faint">[d]</span> připravit odpověď
+        </button>
+        <button
+          type="button"
+          className="text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal disabled:opacity-50"
           title="Přeskočit (s nebo →)"
           disabled={pending}
           onClick={onSkip}
@@ -157,6 +171,9 @@ function TriageCard({ offer, chips, freeText, pending, onToggleChip, onFreeText,
           <span className="text-faint">[o]</span> otevřít
         </a>
       </div>
+      {draftOpen && (
+        <DraftPanel offerId={offer.id} offerTitle={offer.title} offerUrl={offer.url} onError={onError} onMissingFacts={onMissingFacts} />
+      )}
     </article>
   );
 }
@@ -166,7 +183,7 @@ interface HistoryEntry {
   offer: TriageOffer;
 }
 
-export function TriageView({ onError }: { onError: (message: string) => void }) {
+export function TriageView({ onError, onMissingFacts }: { onError: (message: string) => void; onMissingFacts: () => void }) {
   const [queue, setQueue] = useState<TriageOffer[]>([]);
   const [labeled, setLabeled] = useState(0);
   const [remaining, setRemaining] = useState(0);
@@ -174,6 +191,7 @@ export function TriageView({ onError }: { onError: (message: string) => void }) 
   const [pending, setPending] = useState(false);
   const [chips, setChips] = useState<string[]>([]);
   const [freeText, setFreeText] = useState("");
+  const [draftOpen, setDraftOpen] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const seenIds = useRef(new Set<number>());
   const loadingRef = useRef(false);
@@ -228,6 +246,7 @@ export function TriageView({ onError }: { onError: (message: string) => void }) 
   const resetReasons = () => {
     setChips([]);
     setFreeText("");
+    setDraftOpen(false);
   };
 
   const answer = useCallback(
@@ -284,6 +303,8 @@ export function TriageView({ onError }: { onError: (message: string) => void }) 
     setChips((current) => (current.includes(label) ? current.filter((c) => c !== label) : [...current, label]));
   }, []);
 
+  const toggleDraft = useCallback(() => setDraftOpen((open) => !open), []);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -303,6 +324,7 @@ export function TriageView({ onError }: { onError: (message: string) => void }) 
       else if (key === "2") void answer("down");
       else if (key === "3") void answer("aspiration");
       else if (key === "h") void answer("hidden");
+      else if (key === "d") toggleDraft();
       else if (key === "s" || key === "ArrowRight") {
         event.preventDefault();
         skip();
@@ -313,7 +335,7 @@ export function TriageView({ onError }: { onError: (message: string) => void }) 
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [answer, skip, undo, toggleChip]);
+  }, [answer, skip, undo, toggleChip, toggleDraft]);
 
   return (
     <div>
@@ -326,10 +348,14 @@ export function TriageView({ onError }: { onError: (message: string) => void }) 
           chips={chips}
           freeText={freeText}
           pending={pending}
+          draftOpen={draftOpen}
           onToggleChip={toggleChip}
           onFreeText={setFreeText}
           onVerdict={(verdict) => void answer(verdict)}
           onSkip={skip}
+          onToggleDraft={toggleDraft}
+          onError={onError}
+          onMissingFacts={onMissingFacts}
         />
       ) : (
         !loading && (

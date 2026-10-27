@@ -1,4 +1,4 @@
-import type { AgencyPatch, AgencyRow, AspirationRow, EvalSummary, MarketReport, OfferRow, Proposal, Tab, TriageQueue, Verdict } from "./types";
+import type { AgencyPatch, AgencyRow, Application, AppStage, AspirationRow, Draft, EvalSummary, FactsStatus, MarketReport, OfferRow, Proposal, Tab, TriageQueue, Verdict } from "./types";
 
 export interface OfferFilters {
   onlyNew: boolean;
@@ -113,7 +113,56 @@ export async function saveProfile(text: string): Promise<ProfileStatus> {
   });
 }
 
-export type { EvalSummary, Proposal, ProposalStatus } from "./types";
+export async function fetchFacts(signal: AbortSignal): Promise<FactsStatus | null> {
+  const response = await fetch("/api/facts", { signal });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await errorBody(response));
+  return (await response.json()) as FactsStatus;
+}
+
+export async function saveFacts(text: string): Promise<FactsStatus> {
+  return request<FactsStatus>("/api/facts", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+}
+
+export async function fetchApplications(signal: AbortSignal): Promise<Application[] | null> {
+  const response = await fetch("/api/applications", { signal });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await errorBody(response));
+  const parsed: unknown = await response.json();
+  return Array.isArray(parsed) ? (parsed as Application[]) : [];
+}
+
+export async function saveApplication(
+  offerId: number,
+  patch: { stage: AppStage | null; nextActionAt?: string | null; notes?: string | null },
+): Promise<Application> {
+  return request<Application>(`/api/offers/${offerId}/application`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function removeApplication(offerId: number): Promise<void> {
+  await request<unknown>(`/api/offers/${offerId}/application`, { method: "DELETE" });
+}
+
+export async function fetchDraft(offerId: number, signal: AbortSignal): Promise<Draft | null> {
+  const response = await fetch(`/api/offers/${offerId}/draft`, { signal });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await errorBody(response));
+  return (await response.json()) as Draft;
+}
+
+export async function generateDraft(offerId: number, signal: AbortSignal): Promise<Draft> {
+  const response = await fetch(`/api/offers/${offerId}/draft`, { method: "POST", signal });
+  if (!response.ok) throw new Error(await errorBody(response));
+  return (await response.json()) as Draft;
+}
 
 /**
  * Pending proposal list for the Profil tab. Returns `null` when the backend

@@ -1,9 +1,12 @@
 import { AnimatePresence, motion } from "motion/react";
 import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
-import { formatDate, formatDateTime, formatSalary, WORKPLACE_LABELS } from "./format";
-import { linkButton, meta, note, tag } from "./ui";
-import type { OfferRow, Verdict } from "./types";
+import { fetchApplications, removeApplication, saveApplication } from "./api";
+import { DraftPanel } from "./DraftPanel";
+import { formatDate, formatDateTime, formatSalary, toDateInput, WORKPLACE_LABELS } from "./format";
+import { StageSelect } from "./PipelineView";
+import { control, fieldLabel, linkButton, meta, note, tag } from "./ui";
+import type { Application, AppStage, OfferRow, Verdict } from "./types";
 
 interface FeedbackAction {
   verdict: Verdict;
@@ -97,9 +100,123 @@ interface OfferRowProps {
   pending: boolean;
   onSelect: (id: number) => void;
   onFeedback: (offer: OfferRow, verdict: Verdict) => void;
+  onError: (message: string) => void;
+  onMissingFacts: () => void;
 }
 
-function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowProps) {
+/**
+ * Stage control + draft toggle per offer card. The application map loads
+ * once per tab render (404 → all controls hidden until the backend lands).
+ */
+function OfferCopilot({
+  offerId,
+  offerTitle,
+  offerUrl,
+  pendingOffer,
+  onError,
+  onMissingFacts,
+}: {
+  offerId: number;
+  offerTitle: string;
+  offerUrl: string;
+  pendingOffer: boolean;
+  onError: (message: string) => void;
+  onMissingFacts: () => void;
+}) {
+  const [stages, setStages] = useState<Map<number, Application> | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [nextAction, setNextAction] = useState("");
+  const [draftOpen, setDraftOpen] = useState(false);
+  const loaded = stages !== null;
+  const current = stages?.get(offerId) ?? null;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchApplications(controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setStages(new Map((data ?? []).map((row) => [row.offerId, row])));
+      })
+      .catch(() => {
+        // 404 until the backend worker lands: hide the stage controls.
+        if (!controller.signal.aborted) setStages(new Map());
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    setNextAction(current?.nextActionAt?.slice(0, 10) ?? "");
+  }, [current?.nextActionAt]);
+
+  if (!loaded || stages.size === 0) return null;
+
+  const saveStage = async (stage: AppStage | null) => {
+    setSaving(true);
+    try {
+      if (stage === null) {
+        await removeApplication(offerId);
+        setStages((prev) => {
+          const next = new Map(prev ?? []);
+          next.delete(offerId);
+          return next;
+        });
+        setNextAction("");
+        return;
+      }
+      const updated = await saveApplication(offerId, { stage });
+      setStages((prev) => new Map(prev ?? []).set(offerId, updated));
+      setNextAction(updated.nextActionAt?.slice(0, 10) ?? "");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveNextAction = async (value: string) => {
+    setNextAction(value);
+    if (current === null || current.stage !== "applied") return;
+    setSaving(true);
+    try {
+      const updated = await saveApplication(offerId, { stage: current.stage, nextActionAt: value === "" ? null : value });
+      setStages((prev) => new Map(prev ?? []).set(offerId, updated));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-1 pt-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className={fieldLabel}>přihláška</span>
+        <StageSelect value={current?.stage ?? null} pending={pendingOffer || saving} itemLabel={offerTitle} onChange={(stage) => void saveStage(stage)} />
+        {current?.stage === "applied" && (
+          <label className="flex items-center gap-2 text-xs text-muted">
+            <span className={fieldLabel}>kdy se ozvat</span>
+            <input
+              type="date"
+              className={`${control} h-7 text-xs`}
+              value={nextAction}
+              disabled={pendingOffer || saving}
+              aria-label={`Další krok pro ${offerTitle}`}
+              onChange={(event) => void saveNextAction(event.currentTarget.value)}
+            />
+          </label>
+        )}
+        <button
+          type="button"
+          className="text-xs font-medium tracking-[0.1em] text-muted uppercase transition-colors hover:text-signal"
+          aria-expanded={draftOpen}
+          onClick={() => setDraftOpen((open) => !open)}
+        >
+          <span className="text-faint">[{draftOpen ? "–" : "+"}]</span> návrh odpovědi
+        </button>
+      </div>
+      {draftOpen && (
+        <DraftPanel offerId={offerId} offerTitle={offerTitle} offerUrl={offerUrl} onError={onError} onMissingFacts={onMissingFacts} />
+      )}
+    </div>
+  );
+}
+
+function OfferItem({ offer, selected, pending, onSelect, onFeedback, onError, onMissingFacts }: OfferRowProps) {
   const salary = formatSalary(offer);
   const score = offer.score;
   const verdictTag = offer.feedback ? VERDICT_TAGS[offer.feedback.verdict] : undefined;
@@ -174,11 +291,14 @@ function OfferItem({ offer, selected, pending, onSelect, onFeedback }: OfferRowP
           </ul>
         )}
 
-        {offer.feedback?.reason != null && offer.feedback.reason.length > 0 && (
-          <p className="text-sm text-muted"><span className={`${tag} mr-[1ch] text-faint`}>poznámka</span><span className={note}>{offer.feedback.reason}</span></p>
-        )}
-
-        <FeedbackButtons active={offer.feedback?.verdict} pending={pending} itemLabel={offer.title} onFeedback={(verdict) => onFeedback(offer, verdict)} />
+        <OfferCopilot
+          offerId={offer.id}
+          offerTitle={offer.title}
+          offerUrl={offer.url}
+          pendingOffer={pending}
+          onError={onError}
+          onMissingFacts={onMissingFacts}
+        />
       </div>
     </motion.article>
   );
@@ -191,12 +311,14 @@ interface OffersViewProps {
   pendingId: number | null;
   onFeedback: (offer: OfferRow, verdict: Verdict) => void;
   onReset: () => void;
+  onError: (message: string) => void;
+  onMissingFacts: () => void;
 }
 
 const isTyping = (target: EventTarget | null): boolean =>
   target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
-export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset }: OffersViewProps) {
+export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset, onError, onMissingFacts }: OffersViewProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const lastIndex = useRef(0);
 
@@ -262,6 +384,8 @@ export function OffersView({ offers, totalLoaded, pendingId, onFeedback, onReset
               pending={pendingId === offer.id}
               onSelect={setSelectedId}
               onFeedback={onFeedback}
+              onError={onError}
+              onMissingFacts={onMissingFacts}
             />
           ))}
         </AnimatePresence>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchProfile, saveProfile } from "./api";
+import { FactsEditor } from "./FactsEditor";
 import { offerCount } from "./format";
 import { ProposalPanel } from "./ProposalPanel";
 import { primaryButton } from "./ui";
@@ -46,10 +47,10 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
       setSaving(false);
     }
   };
-
   return (
     <section className="grid gap-3">
       <ProposalPanel onError={onError} onApplied={reload} />
+      <FactsEditor onError={onError} />
       <fieldset className="border border-line px-3 pb-3 sm:px-4">
         <legend className="text-[0.75rem] font-medium tracking-[0.2em] text-faint uppercase">profile.md</legend>
         <textarea
