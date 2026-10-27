@@ -11,3 +11,12 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 );
+
+/* Offline shell for the installed PWA: production builds only, dev keeps live reload. */
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("/sw.js").catch(() => {
+      // Offline support is a bonus; the app works without it.
+    });
+  });
+}

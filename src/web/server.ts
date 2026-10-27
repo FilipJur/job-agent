@@ -255,7 +255,10 @@ async function serveStatic(pathname: string): Promise<Response> {
   if (rel !== "") {
     const file = Bun.file(target);
     if (await file.exists()) {
-      return new Response(file, { headers: { "content-type": file.type || "application/octet-stream" } });
+      const headers: Record<string, string> = { "content-type": file.type || "application/octet-stream" };
+      // The service worker must be revalidated on every load or an update never reaches an installed PWA.
+      if (rel === "sw.js") headers["cache-control"] = "no-cache";
+      return new Response(file, { headers });
     }
   }
   if (!rel.includes(".")) {
