@@ -1,13 +1,31 @@
 import type { Database } from "bun:sqlite";
 import { join, resolve, sep } from "node:path";
 import { openDb } from "../db";
+import { generateDraft } from "../copilot/draft";
+import { readFacts, writeFacts } from "../copilot/facts";
 import { marketReport } from "../market/report";
 import { readProfile, writeProfile } from "../profile";
-import { countOffersToScore, listAgencies, listAspirations, listOffers, saveFeedback, triageQueue, updateAgency } from "../repo";
+import {
+  APP_STAGES,
+  countOffersToScore,
+  deleteApplication,
+  draftOffer,
+  latestDraft,
+  listAgencies,
+  listApplications,
+  listAspirations,
+  listOffers,
+  saveDraft,
+  saveFeedback,
+  triageQueue,
+  updateAgency,
+  upsertApplication,
+} from "../repo";
 import { profileHashOf } from "../scoring/run";
-import { scoreModel } from "../scoring/config";
+import { loadScoringConfig, scoreModel } from "../scoring/config";
+import type { PostJson } from "../scoring/client";
 import { applyProposal, listProposals, rejectProposal } from "../tune/proposals";
-import type { AgencyPatch, AgencyStatus } from "../types";
+import type { AgencyPatch, AgencyStatus, AppStage, ApplicationPatch } from "../types";
 
 /** Paths and values are fixed by the API contract in docs; keep them in one place. */
 const DIST = resolve(import.meta.dir, "../../web/dist");
@@ -15,6 +33,7 @@ const TABS = ["hpp", "kontrakty"] as const;
 const VERDICTS = ["up", "down", "responded", "hidden", "aspiration"] as const;
 const STATUSES = ["new", "contacted", "replied", "meeting", "work", "declined"] as const;
 const AGENCY_FIELDS = ["status", "notes", "lastContactAt"] as const;
+const APPLICATION_FIELDS = ["stage", "nextActionAt", "notes"] as const;
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -143,6 +162,83 @@ async function putProfile(req: Request, db: Database): Promise<Response> {
   return profileStatus(db);
 }
 
+/** Facts: the user's own file, the only source a draft may claim from. */
+function factsStatus(): Response {
+  return json(readFacts());
+}
+
+async function putFacts(req: Request): Promise<Response> {
+  const parsed = await readObject(req);
+  if (!parsed.ok) return parsed.response;
+  if (typeof parsed.body.text !== "string") return fail(400, "text must be a string");
+  if (parsed.body.text.trim() === "") return fail(400, "text must not be empty");
+  return json(writeFacts(parsed.body.text));
+}
+
+/** `YYYY-MM-DD` or an ISO date-time; null when unparseable. */
+function parseDate(raw: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}([T ].*)?$/.test(raw)) return null;
+  const ms = Date.parse(raw);
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+}
+
+/** PUT upserts the application; stage is required, a date must parse, unknown fields are 400. */
+async function putApplication(req: Request, db: Database, id: number): Promise<Response> {
+  const offer = db.query<{ n: number }, [number]>("SELECT COUNT(*) AS n FROM offers WHERE id = ?").get(id);
+  if (offer?.n !== 1) return fail(404, `offer ${id} not found`);
+  const parsed = await readObject(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
+  const unknown = Object.keys(body).filter((key) => !(APPLICATION_FIELDS as readonly string[]).includes(key));
+  if (unknown.length > 0) return fail(400, `unknown fields: ${unknown.join(", ")}`);
+  if (!isOneOf<AppStage>(APP_STAGES, body.stage)) return fail(400, `stage must be one of ${APP_STAGES.join(", ")}`);
+  const patch: ApplicationPatch = { stage: body.stage };
+  if ("nextActionAt" in body) {
+    if (body.nextActionAt === null) {
+      patch.nextActionAt = null;
+    } else {
+      const date = typeof body.nextActionAt === "string" ? parseDate(body.nextActionAt) : null;
+      if (date === null) return fail(400, "nextActionAt must be a date string or null");
+      patch.nextActionAt = date;
+    }
+  }
+  if ("notes" in body) {
+    if (body.notes !== null && typeof body.notes !== "string") return fail(400, "notes must be a string or null");
+    patch.notes = body.notes;
+  }
+  return json(upsertApplication(db, id, patch));
+}
+
+function deleteApplicationRoute(db: Database, id: number): Response {
+  const exists = db.query<{ n: number }, [number]>("SELECT COUNT(*) AS n FROM offers WHERE id = ?").get(id);
+  if (exists?.n !== 1) return fail(404, `offer ${id} not found`);
+  deleteApplication(db, id);
+  return json({ ok: true });
+}
+
+/** POST drafts a reply from the facts file; 409 when it holds no fact. Never sends anything. */
+async function postDraft(db: Database, id: number, deps: HandlerDeps): Promise<Response> {
+  const offer = draftOffer(db, id);
+  if (offer === null) return fail(404, `offer ${id} not found`);
+  const { facts } = readFacts();
+  if (facts.length === 0) return fail(409, "facts file has no facts: add one line per verified fact");
+  const apiKey = deps.apiKey ?? process.env.OPENCODE_GO_API_KEY ?? "";
+  if (apiKey === "") return fail(503, "OPENCODE_GO_API_KEY is not set");
+  const { config } = loadScoringConfig();
+  const draft = await generateDraft({
+    offer,
+    facts,
+    model: config.model,
+    endpoint: config.endpoint,
+    maxDescriptionChars: config.maxDescriptionChars,
+    apiKey,
+    sessionId: deps.sessionId ?? crypto.randomUUID(),
+    ...(deps.postJson === undefined ? {} : { postJson: deps.postJson }),
+  });
+  saveDraft(db, draft);
+  return json(draft);
+}
+
 const UI_MISSING = "web UI is not built: run `bun run web:build`";
 
 /** Serves `web/dist`, falling back to index.html for app routes; the API keeps working without a build. */
@@ -178,7 +274,7 @@ function parseUrl(raw: string): URL {
   }
 }
 
-async function route(req: Request, db: Database): Promise<Response> {
+async function route(req: Request, db: Database, deps: HandlerDeps): Promise<Response> {
   const url = parseUrl(req.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const method = req.method.toUpperCase();
@@ -199,6 +295,33 @@ async function route(req: Request, db: Database): Promise<Response> {
     if (method === "POST") return postFeedback(req, db, id);
     if (method === "DELETE") return deleteFeedback(db, id);
     return fail(405, "use POST or DELETE");
+  }
+  const application = /^\/api\/offers\/([^/]+)\/application$/.exec(path);
+  if (application) {
+    const id = parseId(application[1] ?? "");
+    if (id === null) return fail(400, "offer id must be an integer");
+    if (method === "PUT") return putApplication(req, db, id);
+    if (method === "DELETE") return deleteApplicationRoute(db, id);
+    return fail(405, "use PUT or DELETE");
+  }
+  const draft = /^\/api\/offers\/([^/]+)\/draft$/.exec(path);
+  if (draft) {
+    const id = parseId(draft[1] ?? "");
+    if (id === null) return fail(400, "offer id must be an integer");
+    if (method === "POST") return postDraft(db, id, deps);
+    if (method === "GET" || method === "HEAD") {
+      const stored = latestDraft(db, id);
+      return stored === null ? fail(404, `no draft for offer ${id}`) : json(stored);
+    }
+    return fail(405, "use POST or GET");
+  }
+  if (path === "/api/applications") {
+    return method === "GET" || method === "HEAD" ? json(listApplications(db)) : fail(405, "use GET");
+  }
+  if (path === "/api/facts") {
+    if (method === "GET" || method === "HEAD") return factsStatus();
+    if (method === "PUT") return putFacts(req);
+    return fail(405, "use GET or PUT");
   }
   if (path === "/api/market") {
     return method === "GET" || method === "HEAD" ? json(marketReport(db)) : fail(405, "use GET");
@@ -232,10 +355,16 @@ async function route(req: Request, db: Database): Promise<Response> {
   return serveStatic(path);
 }
 
+export interface HandlerDeps {
+  postJson?: PostJson;
+  apiKey?: string;
+  sessionId?: string;
+}
+
 /** API + static app; exported so tests can call it without opening a socket. */
-export async function handle(req: Request, db: Database): Promise<Response> {
+export async function handle(req: Request, db: Database, deps: HandlerDeps = {}): Promise<Response> {
   try {
-    return await route(req, db);
+    return await route(req, db, deps);
   } catch (error) {
     console.error("web: request failed", error);
     return fail(500, error instanceof Error ? error.message : "internal error");
