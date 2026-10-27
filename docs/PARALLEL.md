@@ -1,6 +1,6 @@
 # Parallel work
 
-Rules for running several agent sessions on this repo (Ghostty panes, one OMP session each).
+Rules for running several agent sessions on this repo: native isolated `worker`/`ui-worker` subagents (default) or Ghostty panes with one OMP session each. How to spawn either: `docs/LEAD.md`.
 
 ## Roles
 - **User**: approves plans and merges, watches worker panes, answers workers that ask. At most one prompt in flight per file set.
@@ -10,6 +10,8 @@ Rules for running several agent sessions on this repo (Ghostty panes, one OMP se
 
 ## Where work happens
 Worktrees are for real concurrency only; a single worker does not need one.
+Native isolated workers need none of the setup below: omp clones the repo per worker and returns its commits on `omp/task/<name>`. File sets, review and merging follow the same rules.
+
 
 | Situation | Where the worker works |
 |---|---|

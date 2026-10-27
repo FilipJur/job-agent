@@ -1,22 +1,35 @@
-# Lead guide: spawning workers
+# Lead guide: workers
 
-Read this before dispatching any worker. The lead spawns and watches workers itself; the user no longer pastes prompts. Rules for where workers run, file sets and merging stay in `docs/PARALLEL.md`.
+Read this before dispatching any worker. The lead plans, spawns, watches, reviews and merges; the user no longer pastes prompts. Rules for file sets and merging stay in `docs/PARALLEL.md`.
 
-## Models (strict)
-`.omp/config.yml` (committed) sets the models for every omp session started in this repo or a worktree of it:
+## Models: three fixed tiers (strict)
+`.omp/config.yml` (committed) applies to every omp session started in this repo or a worktree of it. No prewalk, no model switching inside a session.
 
-| Who | Model | Fallback |
-|---|---|---|
-| Worker session | `opencode-go/muse-spark-1.3-contributor` | `anthropic/claude-sonnet-5-5` |
-| Subagents (`task`, `scout`, `sonic`, `reviewer`, …) | `opencode-go/deepseek-v4.1-flash` | `anthropic/claude-haiku-5-5` |
+| Tier | Who | Role → model | Fallback |
+|---|---|---|---|
+| 1 | Lead (any `omp` started in the repo) | `default` → `anthropic/claude-opus-5-5` | — |
+| 2 | Worker: backend, data, collectors | `worker` → `opencode-go/muse-spark-1.3-contributor` | `anthropic/claude-sonnet-5-5` |
+| 2 | UI worker: `web/**` | `ui` → `anthropic/claude-sonnet-5-5` | — |
+| 3 | Helpers: `scout`, `reviewer`, `sonic`, `task` subagents, the advisor | `task` / `advisor` → `opencode-go/deepseek-v4.1-flash` | `anthropic/claude-haiku-5-5` |
 
-The lead session runs Opus 5.5 by the user's decision; the policy above applies to workers and subagents. Read-only research goes to `scout`, reviews to `reviewer` (both on the subagent model), not to the generic `task` agent.
+- Start the lead from the repo (`cd ~/projects/job-agent && omp`): only there it gets Opus, the project agents in `.omp/agents` and the isolation settings. A session started elsewhere sees none of them.
+- Read-only research goes to `scout`, reviews to `reviewer`, never to the generic `task` agent.
+- A different model for one task only when the user asks: Ghostty `scripts/spawn-worker.sh <dir> <prompt> <model>`; native: tag it with `^` in the composer.
+- Check the policy from the repo with `omp config get modelRoles`.
 
-- Do not pass `--model` to workers and do not switch models in a worker session, unless the user asks for a specific model for a task: then pass it as the third argument of `scripts/spawn-worker.sh`.
-- The file applies only when omp starts in a directory that contains it. A worktree created from `main` has it. A directory outside the repo does not.
-- Check the policy from the working directory with `omp config get modelRoles`.
+## Two ways to run a worker
+**Native (default):** the `task` tool with `agent: "worker"` or `"ui-worker"` and `isolated: true`.
+- Each worker runs in an APFS clone of the repo and commits there; omp captures the commits on branch `omp/task/<name>` and applies nothing (`task.isolation.merge: branch`, `apply: false`). The lead reviews and merges that branch like any worker branch.
+- The lead's tree must be clean before spawning: uncommitted files leak into the worker's baseline and break capture.
+- Agent definitions: `.omp/agents/worker.md`, `.omp/agents/ui-worker.md` (worker rules, report format; `ui-worker` autoloads `frontend-design`). Tier-3 advisor "Lead rules" (`.omp/WATCHDOG.yml`, rules in `.omp/WATCHDOG.md`) reviews every 3rd turn and interrupts on waiting/polling, edits outside the file set, forbidden git, production DB access.
+- Watching: the user opens Agent Hub (`Alt+A`) to read any worker live and type into it; the lead steers with `write agent://<name>`. Results auto-deliver; wait with `wait`.
+- Audit: `history://<name>` (transcript), the branch diff `git diff <base>..omp/task/<name>`, then the same checks and `reviewer` as below. `scripts/audit-worker.ts` covers Ghostty runs only.
+- A finished isolated worker cannot be messaged. A fix round is a new worker whose task starts with `git cherry-pick <base>..omp/task/<name>` (explicitly allowed in that task) and lists the fixes.
+- Limits: a worker stops when the lead's process exits (`omp --restore` resumes it); `task.softRequestBudget` is 600 requests.
 
-## Spawn loop
+**Ghostty (for runs that must outlive the lead session, or when the user wants a pane):** the spawn loop below. Same tiers: the script passes the `worker` role model by default, `ui` as the third argument for UI work.
+
+## Spawn loop (Ghostty)
 1. **Plan:** pick the place and the branch per `docs/PARALLEL.md` (one worker: main checkout on its own branch; 2–4 concurrent: one worktree each). Create them before spawning. Shared types/schema ("the contract") are a short worker task merged to `main` first; parallel workers start from that `main`.
 2. **Prompt:** write `.lead/prompts/<task>.md` from the template below (gitignored, lives in the main checkout). The task id is the file name and must be new: never reuse a task id, branch name or report path from an earlier run (add `-2`, `-fix` …).
    - **Subagents inside a worker:** a prompt line starting with `orchestrate:` makes the worker split the task across subagents. Use it only when the task has 2+ substantial parts with disjoint files and a boundary fixed in the prompt (e.g. API server vs. React app). Do not use it for core files (`src/db.ts`, `src/types.ts`, `src/pipeline.ts`, `src/repo.ts`), for small tasks or for fix rounds. Name which part owns shared files (`package.json`, `bun.lock`, `tsconfig.json`); the worker verifies once after all parts finish.
