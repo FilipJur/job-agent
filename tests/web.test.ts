@@ -1,5 +1,8 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { openDb } from "../src/db";
 import { listAgencies, seedAgencies } from "../src/repo";
 import { scoreModel } from "../src/scoring/config";
@@ -161,5 +164,103 @@ describe("profile API", () => {
       if (previous === undefined) delete process.env.PROFILE_PATH;
       else process.env.PROFILE_PATH = previous;
     }
+  });
+});
+
+describe("facts, applications and drafts", () => {
+  let dir: string;
+  const env = { facts: process.env.FACTS_PATH, profile: process.env.PROFILE_PATH };
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "copilot-"));
+    process.env.FACTS_PATH = join(dir, "facts.md");
+    process.env.PROFILE_PATH = join(dir, "profile.md");
+    writeFileSync(process.env.PROFILE_PATH, "PROFIL");
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true });
+    for (const [key, value] of [["FACTS_PATH", env.facts], ["PROFILE_PATH", env.profile]] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  const reply = (value: unknown) => async () => ({
+    status: 200,
+    body: JSON.stringify({ output: [{ type: "message", content: [{ text: JSON.stringify(value) }] }] }),
+  });
+
+  test("facts: GET seeds from the template, PUT rejects empty text and renumbers", async () => {
+    const seeded = await call("/api/facts");
+    expect(seeded.status).toBe(200);
+    expect(seeded.body.facts.length).toBeGreaterThan(0);
+    expect(seeded.body.facts[0].id).toBe("F1");
+    expect(seeded.body.text).not.toContain("<!--");
+
+    expect((await send("PUT", "/api/facts", { text: "   " })).status).toBe(400);
+    const put = await send("PUT", "/api/facts", { text: "- WordPress a ACF.\n## Sekce\n- React a TypeScript." });
+    expect(put.body.facts).toEqual([
+      { id: "F1", text: "WordPress a ACF." },
+      { id: "F2", text: "React a TypeScript." },
+    ]);
+    expect((await call("/api/facts")).body.facts).toHaveLength(2);
+  });
+
+  test("applications: PUT upserts, GET lists in pipeline order, DELETE removes", async () => {
+    const applied = offer(["ico"]);
+    const drafting = offer(["hpp"]);
+    expect((await send("PUT", `/api/offers/${applied}/application`, { stage: "applied" })).body).toMatchObject({
+      offerId: applied,
+      stage: "applied",
+    });
+    await send("PUT", `/api/offers/${drafting}/application`, { stage: "drafting", notes: "psát" });
+
+    const list = await call("/api/applications");
+    expect(list.body.map((a: { offerId: number }) => a.offerId)).toEqual([drafting, applied]);
+
+    expect((await send("PUT", `/api/offers/${applied}/application`, { stage: "sent" })).status).toBe(400);
+    expect((await send("PUT", `/api/offers/${applied}/application`, { stage: "applied", nextActionAt: "zítra" })).status).toBe(400);
+    expect((await send("PUT", "/api/offers/999/application", { stage: "applied" })).status).toBe(404);
+
+    expect((await call(`/api/offers/${applied}/application`, { method: "DELETE" })).body).toEqual({ ok: true });
+    expect((await call("/api/applications")).body.map((a: { offerId: number }) => a.offerId)).toEqual([drafting]);
+  });
+
+  test("draft: 409 without facts; the stored draft keeps supported sentences and shows the rest as dropped", async () => {
+    const id = offer(["ico"]);
+    writeFileSync(process.env.FACTS_PATH!, "# prázdno\n");
+    expect((await send("POST", `/api/offers/${id}/draft`, {})).status).toBe(409);
+
+    writeFileSync(process.env.FACTS_PATH!, "- AI-assisted vývoj: coding agenti, MCP.\n- WordPress a WooCommerce: PHP, ACF.\n");
+    const model = {
+      language: "cs",
+      sentences: [
+        { text: "Dobrý den,", kind: "greeting", facts: [] },
+        { text: "Dělám WordPress a WooCommerce s ACF.", kind: "claim", facts: ["F2"] },
+        { text: "Mám 5 let praxe s PHP.", kind: "claim", facts: ["F2"] },
+        { text: "Jakou sazbu nabízíte?", kind: "question", facts: [] },
+        { text: "Děkuji, Filip", kind: "closing", facts: [] },
+      ],
+    };
+    const res = await handle(
+      new Request(`http://localhost/api/offers/${id}/draft`, { method: "POST" }),
+      db,
+      { postJson: reply(model), apiKey: "k", sessionId: "s" },
+    );
+    const draft = await res.json();
+    expect(res.status).toBe(200);
+    expect(draft.sentences.map((s: { text: string }) => s.text)).toEqual([
+      "Dobrý den,",
+      "Dělám WordPress a WooCommerce s ACF.",
+      "Jakou sazbu nabízíte?",
+      "Děkuji, Filip",
+    ]);
+    expect(draft.dropped).toEqual([{ text: "Mám 5 let praxe s PHP.", why: "číslo 5 není v citovaných faktech" }]);
+    expect(draft.text).toBe("Dobrý den,\n\nDělám WordPress a WooCommerce s ACF. Jakou sazbu nabízíte?\n\nDěkuji, Filip");
+
+    expect((await call(`/api/offers/${id}/draft`)).body).toEqual(draft);
+    expect((await call(`/api/offers/${offer(["ico"])}/draft`)).status).toBe(404);
+    expect((await send("POST", "/api/offers/999/draft", {})).status).toBe(404);
   });
 });

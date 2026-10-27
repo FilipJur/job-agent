@@ -57,6 +57,25 @@ docker compose run --rm cli tune     # generate a proposal now, prints the metri
 
 Applying happens only in the Profil tab (`POST /api/proposals/:id/apply`); a proposal is refused when the profile was edited after it was made.
 
+## Fakta a odpovědi
+
+`data/facts.md` je seznam ověřených faktů o tobě: každý řádek začínající `- ` je
+jeden fakt (F1, F2, … v pořadí). Na první použití se vytvoří z šablony `facts.md`.
+Uprav ho v UI (`PUT /api/facts`) nebo editorem; nic jiného se do návrhu odpovědi
+nedostane.
+
+`POST /api/offers/:id/draft` nechá model napsat odpověď na nabídku a pak ji
+deterministicky zkontroluje (`src/copilot/validate.ts`): tvrzení bez citovaného
+faktu, s neznámým faktem, s číslem, které v citovaných faktech není, nebo bez
+společného slova s nimi se zahodí a zobrazí jako `dropped`. Nic se neodesílá;
+text zkopíruješ a pošleš sám.
+
+Aplikace k nabídce (`PUT /api/offers/:id/application`) drží fázi
+drafting → applied → interview → offer / rejected / withdrawn, datum odeslání,
+další akci a poznámky. První přesun na `applied` nastaví `applied_at` a follow-up
+za 7 dní; termíny, které nastaly u `applied`/`interview`, se objeví v ranním
+přehledu v sekci Follow-upy.
+
 ## Morning digest
 
 `daily` builds the digest last (`src/digest/`), after scoring: new actionable

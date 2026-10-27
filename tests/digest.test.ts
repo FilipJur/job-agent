@@ -7,6 +7,7 @@ import { openDb } from "../src/db";
 import { buildDigest, renderDigest, tabOf } from "../src/digest/build";
 import { headerTitle, pushDigest } from "../src/digest/push";
 import { readSince, runDigest } from "../src/digest/run";
+import { upsertApplication } from "../src/repo";
 import { saveProposal, type StoredProposal } from "../src/tune/proposals";
 
 let db: Database;
@@ -213,5 +214,44 @@ describe("push", () => {
     expect(await pushDigest({ url: "https://x", title: "t", body: "b", fetchFn: (async () => new Response("no", { status: 500 })) as unknown as typeof fetch })).toEqual({
       ok: false, error: "ntfy answered 500",
     });
+  });
+});
+
+describe("follow-ups", () => {
+  test("only applied/interview applications whose next action is due, most overdue first", () => {
+    const overdue = offer({ title: "Overdue" });
+    const justDue = offer({ title: "Just due" });
+    const later = offer({ title: "Later" });
+    const rejected = offer({ title: "Rejected" });
+    const drafting = offer({ title: "Drafting" });
+    upsertApplication(db, overdue, { stage: "applied", nextActionAt: "2026-10-25T07:00:00.000Z" });
+    upsertApplication(db, justDue, { stage: "interview", nextActionAt: NOW });
+    upsertApplication(db, later, { stage: "applied", nextActionAt: "2026-11-01T07:00:00.000Z" });
+    upsertApplication(db, rejected, { stage: "rejected", nextActionAt: "2026-10-25T07:00:00.000Z" });
+    upsertApplication(db, drafting, { stage: "drafting", nextActionAt: "2026-10-25T07:00:00.000Z" });
+
+    const d = buildDigest(db, { since: SINCE, now: NOW });
+    expect(d.followUps).toEqual([
+      {
+        offerId: overdue,
+        title: "Overdue",
+        company: "Acme",
+        stage: "applied",
+        nextActionAt: "2026-10-25T07:00:00.000Z",
+        daysOverdue: 2,
+      },
+      {
+        offerId: justDue,
+        title: "Just due",
+        company: "Acme",
+        stage: "interview",
+        nextActionAt: NOW,
+        daysOverdue: 0,
+      },
+    ]);
+    const markdown = renderDigest(d).markdown;
+    expect(markdown).toContain("## Follow-upy (2)");
+    expect(markdown).toContain("Overdue** – Acme · odesláno · 2 dny po termínu");
+    expect(markdown).toContain("Just due** – Acme · pohovor · dnes");
   });
 });

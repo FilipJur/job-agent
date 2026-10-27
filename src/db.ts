@@ -90,6 +90,26 @@ CREATE TABLE IF NOT EXISTS agencies (
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS applications (
+  offer_id       INTEGER PRIMARY KEY REFERENCES offers (id) ON DELETE CASCADE,
+  stage          TEXT NOT NULL CHECK (stage IN ('drafting', 'applied', 'interview', 'offer', 'rejected', 'withdrawn')),
+  applied_at     TEXT,
+  next_action_at TEXT,
+  notes          TEXT,
+  updated_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_applications_next_action ON applications (next_action_at);
+
+CREATE TABLE IF NOT EXISTS drafts (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  offer_id   INTEGER NOT NULL REFERENCES offers (id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  model      TEXT NOT NULL,
+  language   TEXT NOT NULL,
+  json       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_drafts_offer ON drafts (offer_id);
 `;
 
 const PARTIAL_BACKFILL = `

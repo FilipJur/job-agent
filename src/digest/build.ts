@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { listOffers, triageQueue } from "../repo";
+import { listApplications, listOffers, triageQueue } from "../repo";
 import { listProposals } from "../tune/proposals";
 import type { OfferRow } from "../types";
 
@@ -21,12 +21,23 @@ export interface DigestAgency {
   positionUrl: string | null;
 }
 
+/** An application whose next action is due: the user writes the follow-up himself. */
+export interface DigestFollowUp {
+  offerId: number;
+  title: string;
+  company: string | null;
+  stage: "applied" | "interview";
+  nextActionAt: string;
+  daysOverdue: number;
+}
+
 export interface Digest {
   date: string;
   title: string;
   since: string;
   now: string;
   offers: DigestOffer[];
+  followUps: DigestFollowUp[];
   agencies: DigestAgency[];
   proposalPending: boolean;
   triageRemaining: number;
@@ -117,6 +128,21 @@ export function buildDigest(db: Database, opts: BuildDigestOptions): Digest {
   const proposalPending = listProposals().some((p) => p.status === "pending" && !p.stale);
   // Count only; the rows are not needed.
   const triageRemaining = triageQueue(db, { limit: 0 }).remaining;
+  const nowMs = Date.parse(opts.now);
+  const followUps: DigestFollowUp[] = listApplications(db)
+    .filter(
+      (a): a is typeof a & { stage: "applied" | "interview"; nextActionAt: string } =>
+        (a.stage === "applied" || a.stage === "interview") && a.nextActionAt !== null && Date.parse(a.nextActionAt) <= nowMs,
+    )
+    .map((a) => ({
+      offerId: a.offerId,
+      title: a.title,
+      company: a.company,
+      stage: a.stage,
+      nextActionAt: a.nextActionAt,
+      daysOverdue: Math.max(0, Math.floor((nowMs - Date.parse(a.nextActionAt)) / 86_400_000)),
+    }))
+    .sort((a, b) => Date.parse(a.nextActionAt) - Date.parse(b.nextActionAt) || a.offerId - b.offerId);
   const date = opts.now.slice(0, 10);
   return {
     date,
@@ -124,6 +150,7 @@ export function buildDigest(db: Database, opts: BuildDigestOptions): Digest {
     since: opts.since,
     now: opts.now,
     offers,
+    followUps,
     agencies,
     proposalPending,
     triageRemaining,
@@ -140,6 +167,15 @@ export function renderDigest(d: Digest): RenderedDigest {
       if (o.reason !== "") lines.push(`  ${o.reason}`);
       lines.push(`  ${o.url}`, "");
     }
+  }
+  if (d.followUps.length > 0) {
+    const STAGE: Record<DigestFollowUp["stage"], string> = { applied: "odesláno", interview: "pohovor" };
+    lines.push(`## Follow-upy (${d.followUps.length})`, "");
+    for (const f of d.followUps) {
+      const when = f.daysOverdue === 0 ? "dnes" : `${f.daysOverdue} ${plural(f.daysOverdue, ["den", "dny", "dní"])} po termínu`;
+      lines.push(`- **${f.title}** – ${f.company ?? "neznámá firma"} · ${STAGE[f.stage]} · ${when}`);
+    }
+    lines.push("");
   }
   if (d.agencies.length > 0) {
     lines.push(`## Agentury (${d.agencies.length})`, "");
@@ -159,7 +195,13 @@ export function renderDigest(d: Digest): RenderedDigest {
     }
     lines.push("");
   }
-  if (d.offers.length === 0 && d.agencies.length === 0 && !d.proposalPending && d.triageRemaining === 0) {
+  if (
+    d.offers.length === 0 &&
+    d.followUps.length === 0 &&
+    d.agencies.length === 0 &&
+    !d.proposalPending &&
+    d.triageRemaining === 0
+  ) {
     lines.push(`Nic nového od ${czDate(d.since.slice(0, 10))}.`);
   }
   const parts: string[] = [];
@@ -173,6 +215,9 @@ export function renderDigest(d: Digest): RenderedDigest {
     parts.push(
       `${d.agencies.length} ${plural(d.agencies.length, ["agentura hledá", "agentury hledají", "agentur hledá"])}`,
     );
+  }
+  if (d.followUps.length > 0) {
+    parts.push(`${d.followUps.length} ${plural(d.followUps.length, ["follow-up", "follow-upy", "follow-upů"])}`);
   }
   if (d.proposalPending) parts.push("návrh profilu čeká");
   if (parts.length === 0 && d.triageRemaining > 0) {

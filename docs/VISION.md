@@ -78,6 +78,7 @@ Old MacBook (M1, 8 GB) at home, OrbStack + docker compose: one container for the
 - jobs.cz city search uses a 50 km radius; location comes from the offer detail.
 - Ashby: a remote role whose UTC/GMT band covers +1 or +2 (CET/CEST) counts as EU-reachable.
 - The profile belongs to the user (`data/profile.md`); agents write it only when asked; an empty profile is rejected.
+- Drafts claim only facts from data/facts.md; validation drops uncited claims; nothing is sent.
 
 ## Open questions
 - jobs.cz brand-widget offers (~42 %) expose only a short og:description; is there an allowed full-text source?
