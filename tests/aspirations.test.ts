@@ -54,7 +54,7 @@ describe("aspirations API", () => {
   test("runScoring stores verdict, blocker and direction from the model reply", async () => {
     const id = offer();
     const content = JSON.stringify({ verdict: "aspiration", score: 8, reason: "r", gaps: "g", blocker: "b", direction: "d", labels: [] });
-    const body = JSON.stringify({ choices: [{ message: { content } }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
+    const body = JSON.stringify({ output: [{ type: "message", content: [{ text: content }] }], usage: { input_tokens: 1, output_tokens: 1 } });
     const params = { profile: "p", model: "m", endpoint: "https://example.test", maxDescriptionChars: 4000, apiKey: "k", sessionId: "s", now: () => "2026-10-26T10:00:00.000Z", postJson: async () => ({ status: 200, body }) };
     expect((await runScoring(db, params)).exitCode).toBe(0);
     const select = db.query<{ verdict: string; blocker: string; direction: string }, [number]>("SELECT verdict, blocker, direction FROM offer_scores WHERE offer_id = ?");
