@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchProfile, saveProfile } from "./api";
 import { offerCount } from "./format";
+import { primaryButton } from "./ui";
 
 export function ProfileView({ onError }: { onError: (message: string) => void }) {
   const [text, setText] = useState<string | null>(null);
@@ -21,7 +22,7 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
   }, [onError]);
 
   if (text === null) {
-    return <p className="empty">Načítám profil…</p>;
+    return <p className="py-16 text-center text-muted">Načítám profil…</p>;
   }
 
   const save = async () => {
@@ -38,21 +39,21 @@ export function ProfileView({ onError }: { onError: (message: string) => void })
   };
 
   return (
-    <section className="profile">
+    <section className="grid gap-3">
       <textarea
-        className="profile-text"
+        className="min-h-96 w-full resize-y rounded-xl border border-line bg-surface p-4 font-mono text-sm leading-relaxed text-fg focus-visible:border-accent"
         aria-label="Profil"
         rows={20}
         value={text}
         onChange={(event) => setText(event.target.value)}
       />
-      <div className="profile-actions">
-        <button type="button" className="filter" disabled={saving || text.trim() === ""} onClick={() => void save()}>
+      <div>
+        <button type="button" className={primaryButton} disabled={saving || text.trim() === ""} onClick={() => void save()}>
           Uložit
         </button>
       </div>
-      <p className="status">Čeká na přehodnocení: {offerCount(pending)}</p>
-      <p className="hint">Přehodnotí se při příštím <code>daily</code> nebo <code>bun run score</code>.</p>
+      <p className="text-sm text-muted">Čeká na přehodnocení: {offerCount(pending)}</p>
+      <p className="text-sm text-muted [&_code]:rounded [&_code]:bg-raised [&_code]:px-1 [&_code]:font-mono">Přehodnotí se při příštím <code>daily</code> nebo <code>bun run score</code>.</p>
     </section>
   );
 }
